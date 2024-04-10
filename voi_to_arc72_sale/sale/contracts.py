@@ -1,5 +1,6 @@
 from pyteal import *
 
+
 def approval_program():
     # PARAMETERS
     seller_key = Bytes("seller")
@@ -11,40 +12,38 @@ def approval_program():
     @Subroutine(TealType.none)
     def transferNFT(to_account: Expr) -> Expr:
         return Seq(
-                InnerTxnBuilder.Begin(),
-                InnerTxnBuilder.SetFields({
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(nft_app_id_key), 
-                    TxnField.on_completion: OnComplete.NoOp,
-                    TxnField.application_args: [
-                        Bytes("arc72_transferFrom"),
-                        Global.current_application_address(),
-                        to_account,  # Assuming to_account is already a byte array
-                        Itob(App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
-                    ],
-                }),
-                InnerTxnBuilder.Submit(),
-            )
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields({
+                TxnField.type_enum: TxnType.ApplicationCall,
+                TxnField.application_id: App.globalGet(nft_app_id_key),
+                TxnField.on_completion: OnComplete.NoOp,
+                TxnField.application_args: [
+                    Bytes("arc72_transferFrom"),
+                    Global.current_application_address(),
+                    to_account,  # Assuming to_account is already a byte array
+                    Itob(App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
+                ],
+            }),
+            InnerTxnBuilder.Submit(),
+        )
 
-        
     ##############################################################################################
     @Subroutine(TealType.none)
-    def SendAlgoToSeller(amount: Expr) -> Expr:    
-        return  Seq(       
+    def SendAlgoToSeller(amount: Expr) -> Expr:
+        return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: amount, 
+                    TxnField.amount: amount,
                     TxnField.sender: Global.current_application_address(),
                     TxnField.receiver: App.globalGet(seller_key),
                 }
             ),
             InnerTxnBuilder.Submit(),
         )
-        
+
     ################################################################################################################################################
-    
 
     @Subroutine(TealType.none)
     def closeAccountTo(account: Expr) -> Expr:
@@ -87,8 +86,9 @@ def approval_program():
             And(
                 # the Sale has been set up
                 # on_buy_nft_holding.hasValue(),
-                # on_buy_nft_holding.value() > Int(0),      
-                Gtxn[on_buy_txn_index].amount() == App.globalGet(nft_price), # sender must send exact multiple of price to buy
+                # on_buy_nft_holding.value() > Int(0),
+                Gtxn[on_buy_txn_index].amount() == App.globalGet(nft_price),
+                # sender must send exact multiple of price to buy
                 # the Sale has started
                 App.globalGet(start_time_key) <= Global.latest_timestamp(),
                 # the actual bid payment is before the app call
@@ -99,9 +99,9 @@ def approval_program():
             )
         ),
         Seq(
-            SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()), # pay seller immediately
+            SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()),  # pay seller immediately
             transferNFT(
-                Gtxn[on_buy_txn_index].sender() # send the NFT to the seller.
+                Gtxn[on_buy_txn_index].sender()  # send the NFT to the seller.
             ),
             Approve()
         ),
@@ -118,7 +118,7 @@ def approval_program():
                 Txn.sender() == Global.creator_address()
             )
         ),
-        Assert( new_price > Int(0) ),
+        Assert(new_price > Int(0)),
         ## UPDATE NEW PRICE
         App.globalPut(nft_price, new_price),
         Approve()
@@ -127,7 +127,7 @@ def approval_program():
     #######################
     ################################################################################################################################################
     #######################
-    
+
     on_call_method = Txn.application_args[0]
     on_call = Cond(
         [on_call_method == Bytes("buy"), on_buy],
@@ -152,7 +152,6 @@ def approval_program():
         closeAccountTo(App.globalGet(seller_key)),
         Approve(),
     )
-
 
     #######################
     ################################################################################################################################################

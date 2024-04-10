@@ -400,7 +400,7 @@ def test_close_before_start():
         royalties_fees_percent= royalties_fees_percentage,
         late_bidding_delay= late_bidding_delay
     )
-
+    #
     setupSaleApp(
         client=client,
         appID=appID,
