@@ -119,13 +119,21 @@ def simple_sale():
 
     new_price = 50000000
     print("Updating price just to test")
-    updateSalePrice(
+    tx_id = updateSalePrice(
         client=client,
         appID=SaleAppID,
         funder=creator,
         price=new_price,
         fees_address=fees_address.getAddress(),
     )
+    try:
+        result1 = indexer_client.search_transactions_by_address(fees_address.getAddress())
+    except:
+        print("do not find transaction for fees address")
+    try:
+        result1 = indexer_client.search_transactions(txid=tx_id)
+    except:
+        print("do not find transaction by tx_id")
     current_nft_price = new_price
     print("\n")
     price = getAppGlobalState(client, SaleAppID)[b"price"]

@@ -152,7 +152,7 @@ def updateSalePrice(
     funder: Account,
     price: int,
     fees_address: str
-) -> None:
+) -> str:
     """Finish setting up an Sale.
 
     """
@@ -179,6 +179,7 @@ def updateSalePrice(
     client.send_transactions([signedupdateTxn])
 
     waitForTransaction(client, signedupdateTxn.get_txid())
+    return signedupdateTxn.get_txid()
 
 
 
