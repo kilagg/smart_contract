@@ -12,6 +12,8 @@ from sale.util import (
     to_algorand_address_style
 )
 from sale.testing.setup import getAlgodClient
+from algosdk.v2client.indexer import IndexerClient
+
 from sale.testing.resources import (
     getTemporaryAccount,
     optInToAsset,
@@ -22,18 +24,24 @@ from sale.operations_test import *
 
 def simple_sale():
     client = getAlgodClient()
+    indexer_client = IndexerClient("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                   "http://localhost:4001")
 
     print("Generating temporary accounts...")
     creator = getTemporaryAccount(client)
     buyer = getTemporaryAccount(client)
+    fees_address = getTemporaryAccount(client)
 
     print("Bob (creator / seller account):", creator.getAddress())
     print("Carla (buyer account)", buyer.getAddress())
+    print("Fees (fees account)", fees_address.getAddress())
 
     creatorNftBalance = getBalances(client, creator.getAddress())
     buyerNftBalance = getBalances(client, buyer.getAddress())
+    feesBalance = getBalances(client, fees_address.getAddress())
     print("The creator holds now the following = ", creatorNftBalance)
     print("The buyer holds now the following = ", buyerNftBalance)
+    print("The fees holds now the following = ", feesBalance)
 
     nftID = 123456
     print("Parameter: NFT id = ", nftID)
@@ -56,7 +64,6 @@ def simple_sale():
     current_nft_owner = to_algorand_address_style(owner_bytes)
     print("Current NFT owner is = ", current_nft_owner[:5])
 
-    startTime = int(time()) + 1  # start time is 1 seconds in the future
     price = 1000000
 
     print("Bob is creating the Sale contract for his NFT App ID ", ARC72AppID, " and NFT ID ", nftID)
@@ -66,8 +73,8 @@ def simple_sale():
         seller=creator.getAddress(),
         nftAppID=ARC72AppID,
         nftID=nftID,
-        startTime=startTime,
-        price=price
+        price=price,
+        fees_address=fees_address.getAddress()
     )
 
     escrow_sale_contract = get_application_address(SaleAppID)
@@ -117,6 +124,7 @@ def simple_sale():
         appID=SaleAppID,
         funder=creator,
         price=new_price,
+        fees_address=fees_address.getAddress(),
     )
     current_nft_price = new_price
     print("\n")
@@ -133,7 +141,7 @@ def simple_sale():
     print("Carla is buying...")
 
     ##########################################################
-    Buy(client=client, appID=SaleAppID, nft_app_id=ARC72AppID, buyer=buyer, price=current_nft_price)
+    Buy(client=client, appID=SaleAppID, nft_app_id=ARC72AppID, buyer=buyer, price=current_nft_price, fees_address=fees_address.getAddress())
     print("\n")
 
     sleep(3)

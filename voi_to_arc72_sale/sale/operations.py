@@ -45,8 +45,8 @@ def createSaleApp(
     seller: str,
     nftAppID: int,
     nftID: int,
-    startTime: int,
     price: int,
+    fees_address: str
 ) -> int:
     """Create a new Sale.
 
@@ -79,8 +79,8 @@ def createSaleApp(
         encoding.decode_address(seller),
         nftAppID.to_bytes(8, "big"),
         nftID.to_bytes(8, "big"),
-        startTime.to_bytes(8, "big"),
-        price.to_bytes(8, "big")
+        price.to_bytes(8, "big"),
+        encoding.decode_address(fees_address),
     ]
 
     txn = transaction.ApplicationCreateTxn(
@@ -151,21 +151,26 @@ def updateSalePrice(
     appID: int,
     funder: Account,
     price: int,
+    fees_address: str
 ) -> None:
     """Finish setting up an Sale.
 
     """
     suggestedParams = client.suggested_params()
 
-    app_args =[b"update_price"]
-    app_args.append( (price.to_bytes(8, "big")) )
+    app_args =[
+        b"update_price",
+        price.to_bytes(8, "big")
+    ]
 
+    accounts = [fees_address]
 
     updateTxn = transaction.ApplicationCallTxn(
         sender=funder.getAddress(),
         index=appID,
         on_complete=transaction.OnComplete.NoOpOC,
         app_args=app_args,
+        accounts=accounts,
         sp=suggestedParams,
     )
 
@@ -177,7 +182,7 @@ def updateSalePrice(
 
 
 
-def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price: int) -> None:
+def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price: int, fees_address: str) -> None:
     """Place a bid on an active Sale.
 
     Args:
@@ -191,7 +196,7 @@ def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price:
     appGlobalState = getAppGlobalState(client, appID)
 
     nftID = appGlobalState[b"nft_id"]
-    accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"])]    
+    accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"]), fees_address]
     accounts.append(buyer.getAddress())
 
     foreign_apps = [appID,nft_app_id]
