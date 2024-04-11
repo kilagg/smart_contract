@@ -7,24 +7,6 @@ from algosdk import encoding
 from pyteal import compileTeal, Mode, Expr
 
 from .account import Account
-
-
-import base64
-from hashlib import sha512
-
-# Function to convert bytes to a base32-like encoded string with checksum, inspired by Algorand's address format
-def to_algorand_address_style(byte_data):
-    # Encode the byte data to base32
-    encoded = base64.b32encode(byte_data).decode('utf-8').rstrip('=')
-
-    # Calculate checksum: SHA512_256 of the encoded data, take last 4 bytes, then base32 encode
-    checksum = sha512(byte_data).digest()[-4:]
-    checksum_encoded = base64.b32encode(checksum).decode('utf-8').rstrip('=')
-
-    # Combine encoded data with checksum
-    address = encoded + checksum_encoded
-    return address
-
 class PendingTxnResponse:
     def __init__(self, response: Dict[str, Any]) -> None:
         self.poolError: str = response["pool-error"]
@@ -70,7 +52,7 @@ def waitForTransaction(
 
 
 def fullyCompileContract(client: AlgodClient, contract: Expr) -> bytes:
-    teal = compileTeal(contract, mode=Mode.Application, version=9)
+    teal = compileTeal(contract, mode=Mode.Application, version=5)
     response = client.compile(teal)
     return b64decode(response["result"])
 
@@ -102,6 +84,7 @@ def getAppGlobalState(
     client: AlgodClient, appID: int
 ) -> Dict[bytes, Union[int, bytes]]:
     appInfo = client.application_info(appID)
+    # print("appInfo:\n",appInfo)
     return decodeState(appInfo["params"]["global-state"])
 
 
