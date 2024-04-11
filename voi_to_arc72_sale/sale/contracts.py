@@ -7,7 +7,7 @@ def approval_program():
     nft_id_key = Bytes("nft_id")
     nft_app_id_key = Bytes("nft_app_id")
     nft_price = Bytes("price")
-    start_time_key = Bytes("start")
+    fees_address = Bytes("fees")
 
     @Subroutine(TealType.none)
     def transferNFT(to_account: Expr) -> Expr:
@@ -43,7 +43,21 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
-    ################################################################################################################################################
+    @Subroutine(TealType.none)
+    def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields(
+                {
+                    TxnField.type_enum: TxnType.Payment,
+                    TxnField.amount: amount,
+                    TxnField.sender: Global.current_application_address(),
+                    TxnField.receiver: App.globalGet(fees_address),
+                    TxnField.note: note,
+                }
+            ),
+            InnerTxnBuilder.Submit(),
+        )
 
     @Subroutine(TealType.none)
     def closeAccountTo(account: Expr) -> Expr:
@@ -62,16 +76,12 @@ def approval_program():
 
     ################################################################################################################################################
     # VARIABLE SETUP
-    on_create_start_time = Btoi(Txn.application_args[3])
     on_create = Seq(
         App.globalPut(seller_key, Txn.application_args[0]),
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
         App.globalPut(nft_id_key, Btoi(Txn.application_args[2])),
-        App.globalPut(start_time_key, on_create_start_time),
-        App.globalPut(nft_price, Btoi(Txn.application_args[4])),
-        Assert(
-            Global.latest_timestamp() < on_create_start_time
-        ),
+        App.globalPut(nft_price, Btoi(Txn.application_args[3])),
+        App.globalPut(fees_address, Txn.application_args[4]),
         Approve(),
     )
 
@@ -89,20 +99,17 @@ def approval_program():
                 # on_buy_nft_holding.value() > Int(0),
                 Gtxn[on_buy_txn_index].amount() == App.globalGet(nft_price),
                 # sender must send exact multiple of price to buy
-                # the Sale has started
-                App.globalGet(start_time_key) <= Global.latest_timestamp(),
                 # the actual bid payment is before the app call
                 Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
                 Gtxn[on_buy_txn_index].sender() == Txn.sender(),
-                Gtxn[on_buy_txn_index].receiver() == Global.current_application_address(),
-                Gtxn[on_buy_txn_index].amount() >= Global.min_txn_fee(),
+                Gtxn[on_buy_txn_index].receiver() == Global.current_application_address()
             )
         ),
         Seq(
             SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()),  # pay seller immediately
             transferNFT(
-                Gtxn[on_buy_txn_index].sender()  # send the NFT to the seller.
-            ),
+                Gtxn[on_buy_txn_index].sender()), # send the NFT to the seller.
+                SendNoteToFees(Int(0), Bytes("sale,buy,1/72")),
             Approve()
         ),
         Reject(),
@@ -113,20 +120,20 @@ def approval_program():
     on_update_price = Seq(
         Assert(
             Or(
-                # sender must either be the seller or the Sale creator
                 Txn.sender() == App.globalGet(seller_key),
                 Txn.sender() == Global.creator_address()
             )
         ),
         Assert(new_price > Int(0)),
-        ## UPDATE NEW PRICE
-        App.globalPut(nft_price, new_price),
-        Approve()
+        Seq(
+            App.globalPut(nft_price, new_price),
+            SendNoteToFees(Int(0), Bytes("sale,update,1/72")),
+            Approve()
+        ),
+        Reject()
     )
 
-    #######################
     ################################################################################################################################################
-    #######################
 
     on_call_method = Txn.application_args[0]
     on_call = Cond(
