@@ -101,10 +101,11 @@ def create_ARC200_ARC72Sale_App(
 
 
 def setup_ARC200_ARC72Sale_App(
-
     client: AlgodClient,
     appID: int,
-    funder: Account,
+    nft_app_id: int, 
+    nft_id: int,
+    sender:Account, 
 ) -> None:
     """Finish setting up an Sale.
 
@@ -118,30 +119,65 @@ def setup_ARC200_ARC72Sale_App(
     Args:
         client: An algod client.
         appID: The app ID of the Sale.
-        funder: The account providing the funding for the escrow account.
+        sender: The account providing the funding for the escrow account.
         nftID: The NFT ID
     """
     appAddr = get_application_address(appID)
+    nftAppAddr = get_application_address(nft_app_id)
 
     suggestedParams = client.suggested_params()
 
     fundingAmount = (
         # min account balance
-        400_000+ 10_000
+        400_000 + 10_000
     )
 
     fundAppTxn = transaction.PaymentTxn(
-        sender=funder.getAddress(),
+        sender=sender.getAddress(),
         receiver=appAddr,
         amt=fundingAmount,
         sp=suggestedParams,
     )
+    print("FundingTx for ",appAddr,",  with ",fundingAmount," algo/voi")
+    appGlobalState = getAppGlobalState(client, nft_app_id)
+    app_args = [b"arc72_transferFrom"]
+    app_args.append(
+        encoding.decode_address(sender.getAddress())
+    )
+    if isinstance(appAddr, str):
+        app_args.append(
+            encoding.decode_address(appAddr)
+        )
+    else:
+        app_args.append(
+            encoding.decode_address(appAddr.getAddress())
+        )
+    app_args.append(nft_id)
 
-    transaction.assign_group_id([fundAppTxn])
+    suggestedParams = client.suggested_params()
+    accounts: List[str] = [encoding.encode_address(appGlobalState[b"owner"])]
 
-    signedFundAppTxn = fundAppTxn.sign(funder.getPrivateKey())
-    client.send_transactions([signedFundAppTxn])
-    waitForTransaction(client, signedFundAppTxn.get_txid())
+    if isinstance(appAddr, str):
+        receiver_str = appAddr
+    else:
+        receiver_str = appAddr.getAddress()
+    print("ARC_72 call: app_args = ",[b"arc72_transferFrom", sender.getAddress(), receiver_str, nft_id," on ",nft_app_id])
+
+    depositNFTTxn = transaction.ApplicationCallTxn(
+        sender=sender.getAddress(),
+        index=nft_app_id,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=app_args,
+        accounts=accounts,
+        sp=suggestedParams,
+    )
+    transaction.assign_group_id([fundAppTxn, depositNFTTxn])
+    signedfundAppTxn = fundAppTxn.sign(sender.getPrivateKey())
+    signeddepositNFTTxn = depositNFTTxn.sign(sender.getPrivateKey())
+    client.send_transactions([signedfundAppTxn, signeddepositNFTTxn])
+    print("Signing the grouped [algo/voi, NFT] funding initial Tx from Sender:", sender.getAddress())
+    waitForTransaction(client, signeddepositNFTTxn.get_txid())
+
 
 
 def updateSalePrice(
