@@ -5,7 +5,7 @@ from algosdk.logic import get_application_address
 from algosdk import transaction
 from ARC72.operations import create_ARC72_NFT, ARC72_Transfer
 from ARC200.operations import create_ARC200_token, setupARC200App, ARC200_Transfer, ARC200_OptIn
-from ARC200ARC72.operations import create_ARC200_ARC72Sale_App, setup_ARC200_ARC72Sale_App, Buy_ARC200_ARC72Sale
+from ARC200ARC72.operations import create_ARC200_ARC72Sale_App, setup_ARC200_ARC72Sale_App, Buy_ARC200_ARC72Sale, close_ARC200_ARC72Sale
 from sale.operations import createSaleApp, setupSaleApp, Buy, closeSale, updateSalePrice
 from sale.util import (
     getBalances,
@@ -47,7 +47,7 @@ def decode_dict_addresses(input_dict):
 
 def simple_sale():
     client = getAlgodClient()
-
+    print("LETS GO")
     print("Generating temporary accounts...")
     creator = getTemporaryAccount(client)
     buyer = getTemporaryAccount(client)
@@ -160,8 +160,7 @@ def simple_sale():
     print("Setup/funding the contract...")
     setup_ARC200_ARC72Sale_App(client=client, appID=SaleAppID, funder=creator)
 
-    
-    sleep(2)
+    sleep(1)
     
     creatorNftBalance = getBalances(client, creator.getAddress())
     buyerNftBalance = getBalances(client, buyer.getAddress())
@@ -183,6 +182,16 @@ def simple_sale():
     owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
     current_nft_owner = to_algorand_address_style(owner_bytes)
     print("Current NFT owner is = ", current_nft_owner[:5])
+
+    # # now end the sale
+    # print("Bob will now delete the Sale App")
+    # close_ARC200_ARC72Sale(client=client, appID=SaleAppID, closer=creator)
+    
+    # owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
+    # print("Current NFT owner  is = ", to_algorand_address_style(owner_bytes)[:5])
+
+    # print("End.")
+    # exit(1)
 
     sellerBalancesBefore =  getBalances(client, creator.getAddress())
     print("Alice's balance:", sellerBalancesBefore)
@@ -227,7 +236,7 @@ def simple_sale():
     # Decode the dictionary
     decoded_dict = decode_dict_addresses(approval_state)
     print("\nLet's check SaleAppID allowance from buyer:",decoded_dict)
-    sleep(1)
+    sleep(2)
     owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
     current_nft_owner = to_algorand_address_style(owner_bytes)
     print("Final NFT owner is = ", current_nft_owner[:5])
@@ -239,5 +248,10 @@ def simple_sale():
     alice_state = getAppLocalState(client, ARC200AppID, buyer)
     decoded_dict = decode_dict_addresses(alice_state)
     print("Alice (buyer) ARC200 balance:",decoded_dict)
+
+    # now end the sale
+    print("Bob will now delete the Sale App")
+    close_ARC200_ARC72Sale(client=client, appID=SaleAppID, closer=creator)
+    print("End.")
 
 simple_sale()
