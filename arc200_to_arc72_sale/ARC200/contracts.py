@@ -154,7 +154,8 @@ def approval_program():
     program = Cond(
         [Txn.application_id() == Int(0), on_creation],
         [Txn.on_completion() == OnComplete.NoOp, on_call],
-        [Txn.on_completion() == OnComplete.OptIn, Approve()]
+        [Txn.on_completion() == OnComplete.OptIn, Approve()],
+        [Txn.on_completion() == OnComplete.CloseOut, Approve()]
     )
 
     return program
