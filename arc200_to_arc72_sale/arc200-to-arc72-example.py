@@ -158,8 +158,13 @@ def simple_sale():
     )
 
     print("Setup/funding the contract...")
-    setup_ARC200_ARC72Sale_App(client=client, appID=SaleAppID, funder=creator)
-
+    
+    ###### ARC72 TRANSFER & FUNDING OF CONTRACT
+    ##########################################################
+    print("\nBob is transfering his ARC72 NFT & funding algo/voi to the Sale contract")
+    setup_ARC200_ARC72Sale_App( client=client, appID=SaleAppID,
+                                nft_app_id=ARC72AppID, nft_id=nftID,
+                                sender=creator)
     sleep(1)
     
     creatorNftBalance = getBalances(client, creator.getAddress())
@@ -167,17 +172,12 @@ def simple_sale():
     escrow_sale_contractBalance = getBalances(client, escrow_sale_contract)
     print("The creator holds now the following = ",creatorNftBalance)
     print("The buyer holds now the following = ",buyerNftBalance)
+    owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
+    print("Current NFT owner = ", to_algorand_address_style(owner_bytes)[:5])
     print("Sale Escrow ALGO balance =", escrow_sale_contractBalance)
 
-
-    owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
-    print("Current NFT owner  is = ", to_algorand_address_style(owner_bytes)[:5])
     # simulate transfer() from Bob to Alice
 
-    ###### ARC72 TRANSFER
-    ##########################################################
-    print("\nBob is transfering his NFT to the Sale contract by ARC72_Transfer")
-    ARC72_Transfer(client=client, nft_app_id=ARC72AppID, sender=creator, receiver=escrow_sale_contract, nft_id=nftID)
     print("\n")
     owner_bytes = getAppGlobalState(client, ARC72AppID)[b"owner"]
     current_nft_owner = to_algorand_address_style(owner_bytes)
