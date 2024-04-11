@@ -13,8 +13,7 @@ def approval_program():
     # ARC-72 methods
     # arc72_ownerOf implementation
     @Subroutine(TealType.bytes)
-    def ownerOf() -> Expr:
-        token_id = Btoi(Txn.application_args[1]),
+    def ownerOf(token_id: Expr) -> Expr:
         Assert(token_id == App.globalGet(nft_id_key)),
         return App.globalGet(owner_key)
     
@@ -30,7 +29,7 @@ def approval_program():
                        to_addr, Bytes(","), 
                        Itob(token_id), Bytes(")"))),
         ])
-
+    
     # On creation, set the creator as the owner and store the NFT ID
     on_creation = Seq([
         App.globalPut(owner_key, Txn.sender()),
@@ -48,14 +47,21 @@ def approval_program():
                     Btoi(Txn.application_args[3])),
             Approve()
             )
-        ]
+        ],
+        [on_call_method == Bytes("arc72_ownerOf"), 
+            Seq(    
+                # Emit the owner address instead of returning it
+                Log(ownerOf(Btoi(Txn.application_args[1]))),
+                Approve()
+            )
+        ],
     )
     
     # Program start
     program = Cond(
-        [Txn.application_id() == Int(0), on_creation]
-        ,
-        [Txn.on_completion() == OnComplete.NoOp, on_call]
+        [Txn.application_id() == Int(0), on_creation],
+        [Txn.on_completion() == OnComplete.NoOp, on_call],
+        [Txn.on_completion() == OnComplete.CloseOut, Approve()]
     )
     
     return program
