@@ -18,10 +18,10 @@ def approval_program():
                 TxnField.application_id: App.globalGet(nft_app_id_key),
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.application_args: [
-                    Bytes("arc72_transferFrom"),
+                    Bytes("base16", "f2f194a0"),
                     Global.current_application_address(),
                     to_account,  # Assuming to_account is already a byte array
-                    Itob(App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
+                    (App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
                 ],
             }),
             InnerTxnBuilder.Submit(),
