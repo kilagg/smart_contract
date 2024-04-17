@@ -304,6 +304,7 @@ def closeSale(client: AlgodClient, appID: int, closer: Account):
     """
     appGlobalState = getAppGlobalState(client, appID)
     accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"])]
+    accounts.append(encoding.encode_address(appGlobalState[b"fees_address"]))
 
     foreign_apps = [appGlobalState[b"nft_app_id"]]
     deleteTxn = transaction.ApplicationDeleteTxn(
