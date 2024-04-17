@@ -70,7 +70,7 @@ def waitForTransaction(
 
 
 def fullyCompileContract(client: AlgodClient, contract: Expr) -> bytes:
-    teal = compileTeal(contract, mode=Mode.Application, version=9)
+    teal = compileTeal(contract, mode=Mode.Application, version=10)
     response = client.compile(teal)
     return b64decode(response["result"])
 
