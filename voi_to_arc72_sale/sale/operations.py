@@ -56,10 +56,6 @@ def createSaleApp(
         seller: The address of the seller that currently holds the NFT being
             auctioned.
         nftID: The ID of the NFT being auctioned.
-        startTime: A UNIX timestamp representing the start time of the Sale.
-            This must be greater than the current UNIX timestamp.
-        endTime: A UNIX timestamp representing the end time of the Sale. This
-            must be greater than startTime.
         reserve: The reserve amount of the Sale. If the Sale ends without
             a bid that is equal to or greater than this amount, the Sale will
             fail, meaning the bid amount will be refunded to the lead bidder and
@@ -80,7 +76,7 @@ def createSaleApp(
         nftAppID.to_bytes(8, "big"),
         nftID.to_bytes(8, "big"),
         price.to_bytes(8, "big"),
-        encoding.decode_address(fees_address),
+        encoding.decode_address(fees_address)
     ]
 
     txn = transaction.ApplicationCreateTxn(
@@ -151,20 +147,20 @@ def updateSalePrice(
     appID: int,
     funder: Account,
     price: int,
-    fees_address: str
-) -> str:
+) -> None:
     """Finish setting up an Sale.
 
     """
     suggestedParams = client.suggested_params()
 
-    app_args =[
-        b"update_price",
-        price.to_bytes(8, "big")
-    ]
+    app_args =[b"update_price"]
+    app_args.append( (price.to_bytes(8, "big")) )
 
-    accounts = [fees_address]
+    appGlobalState = getAppGlobalState(client, appID)
+    accounts: List[str] = [encoding.encode_address(appGlobalState[b"fees_address"])]    
+    # or replace directly from function input
 
+    # forge tx
     updateTxn = transaction.ApplicationCallTxn(
         sender=funder.getAddress(),
         index=appID,
@@ -179,11 +175,27 @@ def updateSalePrice(
     client.send_transactions([signedupdateTxn])
 
     waitForTransaction(client, signedupdateTxn.get_txid())
-    return signedupdateTxn.get_txid()
 
 
+def get_nft_id_box(nft_id):
+    hex_nft = hex(nft_id)[2:]
+    value = 0
+    padding = 64 - len(hex_nft)
+    hex_nft_n = f"6e{value:#0{padding}}{hex_nft}"
+    return bytes.fromhex(hex_nft_n)
 
-def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price: int, fees_address: str) -> None:
+
+def get_double_address_box(address):
+    hex_address = encoding.decode_address(address).hex()
+    return bytes.fromhex(hex_address + hex_address)
+
+
+def get_address_box(address):
+    hex_address = encoding.decode_address(address).hex()
+    return bytes.fromhex('62' + hex_address)
+
+
+def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price: int) -> None:
     """Place a bid on an active Sale.
 
     Args:
@@ -196,14 +208,34 @@ def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price:
     print("Buying:\t-appAddr = ",appAddr," with ",price," algo")
     appGlobalState = getAppGlobalState(client, appID)
 
-    nftID = appGlobalState[b"nft_id"]
-    accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"]), fees_address]
-    accounts.append(buyer.getAddress())
-
-    foreign_apps = [appID,nft_app_id]
+    # Also possible to provide directly as parameters, attention with encoding.
+    nftID = appGlobalState[b"nft_id"] # ref 
+    seller_address = encoding.encode_address(appGlobalState[b"seller"])
+    fees_address = encoding.encode_address(appGlobalState[b"fees_address"])
 
     suggestedParams = client.suggested_params()
 
+    # Pre-Validation Transaction (Transaction 1)
+    # Unique references: 5
+    # - Buyer's address (ref 1)
+    # - Sale application ID (ref 2)
+    # - Seller's address (ref 3)
+    # - Fees address (ref 4)
+    # - NFT application ID (ref 5)
+    preValidateTxn = transaction.ApplicationCallTxn(
+        sender=buyer.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=[b"pre_validate"],
+        accounts=[seller_address, fees_address],
+        foreign_apps=[nft_app_id],
+        sp=suggestedParams,
+    )
+
+    # Payment Transaction (Transaction 2)
+    # Unique references: 2
+    # - Buyer's address (ref 1, shared with preValidateTxn)
+    # - Application's address (ref 6)
     payTxn = transaction.PaymentTxn(
         sender=buyer.getAddress(),
         receiver=appAddr,
@@ -211,20 +243,44 @@ def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price:
         sp=suggestedParams,
     )
 
+    # Application Call Transaction (Transaction 3)
+    # Unique references: 6
+    # - Buyer's address (ref 1, shared with preValidateTxn and payTxn)
+    # - Sale application ID (ref 2, implicitly included at position 0)
+    # - NFT ID box (ref 7)
+    # - Buyer's address duplication box (ref 8)
+    # - Buyer's address box (ref 9)
+    # - Application's address box (ref 10)
     appCallTxn = transaction.ApplicationCallTxn(
         sender=buyer.getAddress(),
         index=appID,
         on_complete=transaction.OnComplete.NoOpOC,
         app_args=[b"buy"],
-        accounts=accounts,
-        foreign_apps=foreign_apps,
         sp=suggestedParams,
+        boxes=[(0, get_nft_id_box(nftID)),
+            (0, get_double_address_box(buyer.getAddress())),
+            (0, get_address_box(buyer.getAddress())),
+            (0, get_address_box(appAddr)),
+            ],
     )
-    transaction.assign_group_id([payTxn, appCallTxn])
+    print("---------- \nSigning the grouped preValidate - Fund - Buy transaction")
+
+    # Group the transactions
+    grouped_txns = [preValidateTxn, payTxn, appCallTxn]
+    transaction.assign_group_id(grouped_txns)
+
+    # Sign the transactions
+    signedPreValidateTxn = preValidateTxn.sign(buyer.getPrivateKey())
     signedPayTxn = payTxn.sign(buyer.getPrivateKey())
     signedAppCallTxn = appCallTxn.sign(buyer.getPrivateKey())
-    client.send_transactions([signedPayTxn, signedAppCallTxn])
-    waitForTransaction(client, appCallTxn.get_txid())
+
+    # Send the transactions
+    try:
+        client.send_transactions([signedPreValidateTxn, signedPayTxn, signedAppCallTxn])
+        waitForTransaction(client, appCallTxn.get_txid())
+        print("<*>\tTransaction passed\n----------")
+    except Exception as e:
+        print("<!>\tTransaction Failed: ",e,"\n----------")
 
 
 def closeSale(client: AlgodClient, appID: int, closer: Account):
@@ -251,11 +307,12 @@ def closeSale(client: AlgodClient, appID: int, closer: Account):
 
     accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"])]
 
+    foreign_apps = [appGlobalState[b"nft_app_id"]]
     deleteTxn = transaction.ApplicationDeleteTxn(
         sender=closer.getAddress(),
         index=appID,
         accounts=accounts,
-        foreign_assets=[nftID],
+        foreign_apps=foreign_apps,
         sp=client.suggested_params(),
     )
     signedDeleteTxn = deleteTxn.sign(closer.getPrivateKey())
