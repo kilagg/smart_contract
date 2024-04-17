@@ -283,6 +283,7 @@ def Buy(client: AlgodClient, appID: int, nft_app_id: int, buyer: Account, price:
         print("<!>\tTransaction Failed: ",e,"\n----------")
 
 
+
 def closeSale(client: AlgodClient, appID: int, closer: Account):
     """Close an Sale.
 
@@ -302,9 +303,6 @@ def closeSale(client: AlgodClient, appID: int, closer: Account):
             Sale before it starts. Otherwise, this can be any account.
     """
     appGlobalState = getAppGlobalState(client, appID)
-
-    nftID = appGlobalState[b"nft_id"]
-
     accounts: List[str] = [encoding.encode_address(appGlobalState[b"seller"])]
 
     foreign_apps = [appGlobalState[b"nft_app_id"]]
@@ -316,7 +314,5 @@ def closeSale(client: AlgodClient, appID: int, closer: Account):
         sp=client.suggested_params(),
     )
     signedDeleteTxn = deleteTxn.sign(closer.getPrivateKey())
-
     client.send_transaction(signedDeleteTxn)
-
     waitForTransaction(client, signedDeleteTxn.get_txid())
