@@ -1,5 +1,6 @@
 from pyteal import *
 
+FIXED_FEE =  0 # Set to 1000000 for 1 VOI/ALGO
 
 def approval_program():
     # PARAMETERS
@@ -7,7 +8,7 @@ def approval_program():
     nft_id_key = Bytes("nft_id")
     nft_app_id_key = Bytes("nft_app_id")
     nft_price = Bytes("price")
-    fees_address = Bytes("fees")
+    fees_address = Bytes("fees_address")
 
     @Subroutine(TealType.none)
     def transferNFT(to_account: Expr) -> Expr:
@@ -21,7 +22,7 @@ def approval_program():
                     Bytes("base16", "f2f194a0"),
                     Global.current_application_address(),
                     to_account,  # Assuming to_account is already a byte array
-                    (App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
+                    Itob(App.globalGet(nft_id_key))  # Assuming this returns a byte array or is converted appropriately
                 ],
             }),
             InnerTxnBuilder.Submit(),
@@ -50,7 +51,7 @@ def approval_program():
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: amount,
+                    TxnField.amount: amount, #if proportional: Mul(Div( Mul(App.globalGet(nft_price), App.globalGet(percentage)),  Int(100))
                     TxnField.sender: Global.current_application_address(),
                     TxnField.receiver: App.globalGet(fees_address),
                     TxnField.note: note,
@@ -74,6 +75,28 @@ def approval_program():
             )
         )
 
+    @Subroutine(TealType.bytes)
+    def arc72_owner(tokenId: Expr) -> Expr:
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields(
+                {
+                    TxnField.type_enum: TxnType.ApplicationCall,
+                    TxnField.application_id: App.globalGet(nft_app_id_key),
+                    TxnField.applications: [
+                        App.globalGet(nft_app_id_key),
+                    ],
+                    TxnField.accounts: [Global.current_application_address()],
+                    TxnField.application_args: [
+                        Bytes("base16", "79096a14"),  # // method
+                        tokenId,  # // tokenId
+                    ],
+                }
+            ),
+            InnerTxnBuilder.Submit(),
+            Return(InnerTxn.last_log()),
+        )
+
     ################################################################################################################################################
     # VARIABLE SETUP
     on_create = Seq(
@@ -87,29 +110,20 @@ def approval_program():
 
     ##############################################################################################################################
     on_buy_txn_index = Txn.group_index() - Int(1)
-    # on_buy_nft_holding = AssetHolding.balance(
-    #     Global.current_application_address(), App.globalGet(nft_id_key)
-    # )
     on_buy = Seq(
-        # on_buy_nft_holding,
         Assert(
             And(
-                # the Sale has been set up
-                # on_buy_nft_holding.hasValue(),
-                # on_buy_nft_holding.value() > Int(0),
                 Gtxn[on_buy_txn_index].amount() == App.globalGet(nft_price),
-                # sender must send exact multiple of price to buy
-                # the actual bid payment is before the app call
                 Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
                 Gtxn[on_buy_txn_index].sender() == Txn.sender(),
                 Gtxn[on_buy_txn_index].receiver() == Global.current_application_address()
             )
         ),
         Seq(
-            SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()),  # pay seller immediately
+            SendNoteToFees(Int(FIXED_FEE), Bytes("sale,buy,1/72")),
+            SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()-Int(FIXED_FEE)),  # pay seller immediately
             transferNFT(
                 Gtxn[on_buy_txn_index].sender()), # send the NFT to the seller.
-                SendNoteToFees(Int(0), Bytes("sale,buy,1/72")),
             Approve()
         ),
         Reject(),
@@ -137,6 +151,7 @@ def approval_program():
 
     on_call_method = Txn.application_args[0]
     on_call = Cond(
+        [on_call_method == Bytes("pre_validate"), Approve()],
         [on_call_method == Bytes("buy"), on_buy],
         [on_call_method == Bytes("update_price"), on_update_price]
     )
@@ -151,10 +166,11 @@ def approval_program():
                 Txn.sender() == Global.creator_address()
             )
         ),
-        # the Sale is ongoing but seller wants to cancel
-        transferNFT(
-            App.globalGet(seller_key)
-        ),
+        # IF SELLER TRANSFERS HIS NFT ON THE CONTRAT INSTEAD OF APPROVE
+        If( # And that he wants to cancel (NFT still ON the contract)
+            arc72_owner(Itob(App.globalGet(nft_id_key)))
+            == Global.current_application_address()
+        ).Then(transferNFT(App.globalGet(seller_key))),
         # send remaining funds to the seller
         closeAccountTo(App.globalGet(seller_key)),
         Approve(),
@@ -189,10 +205,11 @@ def clear_state_program():
 
 
 if __name__ == "__main__":
-    with open("approval.teal", "w") as f:
-        compiled = compileTeal(approval_program(), mode=Mode.Application, version=9)
+
+    with open("algo_arc72_sale_approval.teal", "w") as f:
+        compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
         f.write(compiled)
 
-    with open("clear_state.teal", "w") as f:
-        compiled = compileTeal(clear_state_program(), mode=Mode.Application, version=9)
+    with open("algo_arc72_sale_clear_state.teal", "w") as f:
+        compiled = compileTeal(clear_state_program(), mode=Mode.Application, version=10)
         f.write(compiled)
