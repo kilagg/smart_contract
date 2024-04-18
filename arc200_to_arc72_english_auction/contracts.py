@@ -211,6 +211,7 @@ def approval_program():
 
     on_call_method = Txn.application_args[0]
     on_call = Cond(
+        [on_call_method == Bytes("pre_validate"), Approve()],
         [on_call_method == Bytes("bid"), on_bid],
     )
 
