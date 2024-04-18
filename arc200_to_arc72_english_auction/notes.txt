@@ -1,0 +1,69 @@
+ARC200->ARC72 AUCTION
+
+# INTERFACES SIGNATURES TO CALL EXT METHODS
+# 1. arc72_transferFrom : f2f194a0
+# 2. arc200_approve : fc7e1f43
+# 3. arc200_transferFrom : f43a105d
+# 4. arc72_ownerOf: 79096a14
+# 5. arc200_transfer: 1df06e69
+
+##############################################################################
+A. Seller - sale creator side
+
+1. Create Sale APP:
+
+    app_args = [
+	
+        encoding.decode_address(seller),
+        nftAppID.to_bytes(8, "big"),
+        arc200_app_id.to_bytes(8, "big"),
+        encoding.decode_address(fees_address),
+		
+        nftID.to_bytes(32, "big"),            # -> pareil que pour la sale, bien en bytes
+        reserve_amount.to_bytes(8, "big"),
+        end_time_key.to_bytes(8, "big") # timestamp
+    ]
+	-> SaleAppID, SaleAppAddress
+	
+2. Fund SaleAppAddress with 200_000 voi (or less we'll see)
+		and with the ARC72 NFT
+		
+		Grouped txs:
+			a. Funding Tx with 200_000 voi
+			b. ARC72_approve from Seller to SaleAppID
+			c. (optional) opt in the ARC200 if stateful-implemented 
+
+(Optional)
+3. Can UpdatePrice and Delete SaleApp anytime, just like with VOI->ARC72 Sale
+
+##############################################################################
+B. Bidder side
+
+BidAmount must be >= reserve & >= 10% * last bid
+
+Grouped txs:
+		- ARC200_approve(SaleAppAddress, BidAmount) (can be outside of group, earlier, technically)
+		- pre_validate AppCall 
+		
+			sender=buyerAddress,
+			index=SaleAppID,
+			on_complete=transaction.OnComplete.NoOpOC,
+			app_args=[b"pre_validate"],
+			accounts=[seller_address, fees_address],
+			foreign_apps=[ARC72AppID, ARC200AppID, SaleAppID],
+			sp=suggestedParams
+			
+	    - buy AppCall with BidAmount 
+		
+			sender=buyerAddress,
+			index=SaleAppID,
+			on_complete=transaction.OnComplete.NoOpOC,
+			app_args=[b"buy", BidAmount.to_bytes(8, "big")],
+			sp=suggestedParams,
+			boxes=[(0, get_nft_id_box(nftID)),
+				(0, get_double_address_box(buyer.getAddress())),
+				(0, get_address_box(buyer.getAddress())),
+				(0, get_address_box(appAddr)),
+				.. 
+				+ ARC200 boxes
+				]
