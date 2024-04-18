@@ -1,45 +1,66 @@
 from pyteal import *
 
 
+# arc72_transferFrom -> f2f194a0
+# arc200_transfer -> 1df06e69
+
+FIXED_FEE = 0
 def approval_program():
     # PARAMETERS
     seller_key = Bytes("seller")
     nft_id_key = Bytes("nft_id")
-    nft_app_id_key = Bytes("nft_app_id")
+    nft_app_id_key = Bytes("nft_app_id")        # parameter for the ARC-72 asset
+    arc200_app_id_key = Bytes("arc200_app_id")  # parameter for ARC-200 asset ID
     nft_price = Bytes("price")
-    start_time_key = Bytes("start")
-    arc200_app_id_key = Bytes("arc200_app_id")  # New parameter for ARC-200 asset ID
+    fees_address = Bytes("fees_address")
+
+    #################################### TRANSFER FUNCTIONS : calling external token/nft contracts #####################################
+    @Subroutine(TealType.none)
+    def ARC72transferFrom(to_account: Expr) -> Expr:
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields({
+                TxnField.type_enum: TxnType.ApplicationCall,
+                TxnField.application_id: App.globalGet(nft_app_id_key),
+                TxnField.on_completion: OnComplete.NoOp,
+                TxnField.applications: [App.globalGet(nft_app_id_key)],
+                TxnField.application_args: [
+                    Bytes("base16", "f2f194a0"),            # arc72_transferFrom
+                    App.globalGet(seller_key),              # FROM: the seller who previously approved client side
+                    to_account,                             # TO
+                    App.globalGet(nft_id_key)               # the NFT ID in question
+                ],
+            }),
+            InnerTxnBuilder.Submit(),
+        )
 
     @Subroutine(TealType.none)
-    def transferNFT(to_account: Expr) -> Expr:
+    def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(nft_app_id_key),
+                    TxnField.application_id: App.globalGet(arc200_app_id_key),
+                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
                     TxnField.accounts: [
-                        to_account,
-                        Global.current_application_address(),
+                        from_,
+                        to_
                     ],
-                    TxnField.on_completion: OnComplete.NoOp,
-                    TxnField.applications: [App.globalGet(nft_app_id_key)],
                     TxnField.application_args: [
-                        Bytes("arc72_transferFrom"),
-                        Global.current_application_address(),
-                        to_account,  # Assuming to_account is already a byte array
-                        Itob(
-                            App.globalGet(nft_id_key)
-                        ),  # Assuming this returns a byte array or is converted appropriately
+                        Bytes("base16", "f43a105d"),                # arc200_transferFrom
+                        from_,                                      # FROM: approver/owner
+                        to_,                                        # TO
+                        Itob(amount_),                              # ARC200 Amount
                     ],
                 }
             ),
             InnerTxnBuilder.Submit(),
         )
 
-    ##############################################################################################
+    ######################################## Optional OptIn if ARC200 is stateful app ############################################
     @Subroutine(TealType.none)
-    def FetchApprovedARC200ToEscrow(owner: Expr, amount: Expr) -> Expr:
+    def OptInARC200() -> Expr:
         return Seq(
             # Make sure this contract is Opted in to the ARC200 before trying to transferFrom
             # Opt-in to the payment token (ARC200) to be able to have a sale balance (if ARC200 is implemented like that?)
@@ -58,55 +79,27 @@ def approval_program():
                 }
             ),
             InnerTxnBuilder.Submit(),
-            # Fetch the tokens we have been promised/approved
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.accounts: [
-                        Gtxn[1].accounts[0],
-                        Gtxn[1].accounts[1],
-                        Global.current_application_address(),
-                    ],
-                    TxnField.application_args: [
-                        Bytes("arc200_transferFrom"),
-                        owner,
-                        Global.current_application_address(),
-                        Itob(amount),
-                    ],
-                }
-            ),
-            InnerTxnBuilder.Submit(),
         )
 
+    ########################################################### LOGGING FOR INDEXER PURPOSES ######################################################
     @Subroutine(TealType.none)
-    def SendARC200ToSeller(amount: Expr) -> Expr:
+    def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.accounts: [
-                        Gtxn[1].accounts[0],
-                        Gtxn[1].accounts[1],
-                        Global.current_application_address(),
-                    ],
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.application_args: [
-                        Bytes("arc200_transfer"),
-                        App.globalGet(seller_key),
-                        Itob(amount),
-                    ],
-                    TxnField.on_completion: OnComplete.NoOp,
+                    TxnField.type_enum: TxnType.Payment,
+                    TxnField.amount: amount,
+                    TxnField.sender: Global.current_application_address(),
+                    TxnField.receiver: App.globalGet(fees_address),
+                    TxnField.note: note,
                 }
             ),
             InnerTxnBuilder.Submit(),
         )
 
-    ################################################################################################################################################
+
+    ################################################################    CLOSURE FUNCTIONS   ###########################################################
     @Subroutine(TealType.none)
     def closeAccountTo(account: Expr) -> Expr:
         return If(Balance(Global.current_application_address()) != Int(0)).Then(
@@ -122,55 +115,6 @@ def approval_program():
             )
         )
 
-    @Subroutine(TealType.uint64)
-    def allowance_check(owner: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.accounts: [
-                        Gtxn[1].accounts[0],
-                        Gtxn[1].accounts[1],
-                        Global.current_application_address(),
-                    ],
-                    TxnField.application_args: [
-                        Bytes("arc200_allowance"),  # // method
-                        owner,  # // allower
-                        Global.current_application_address(),  # // spendee
-                    ],
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-            Return(InnerTxn.last_valid()),
-        )
-
-    @Subroutine(TealType.bytes)
-    def arc72_owner(tokenId: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(nft_app_id_key),
-                    TxnField.applications: [
-                        App.globalGet(arc200_app_id_key),
-                        App.globalGet(nft_app_id_key),
-                    ],
-                    TxnField.accounts: [Global.current_application_address()],
-                    TxnField.application_args: [
-                        Bytes("arc72_ownerOf"),  # // method
-                        tokenId,  # // tokenId
-                    ],
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-            Return(InnerTxn.last_log()),
-        )
-
-    ################################################################################################################################################
     @Subroutine(TealType.none)
     def clear_state_from_app() -> Expr:
         return Seq(
@@ -193,30 +137,26 @@ def approval_program():
         )
 
     ################################################################################################################################################
-    # VARIABLE SETUP
-    note_content = Bytes("This is a note field")
-
-    on_create_start_time = Btoi(Txn.application_args[3])
+    # SETUP
     on_create = Seq(
         App.globalPut(seller_key, Txn.application_args[0]),
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
-        App.globalPut(nft_id_key, Btoi(Txn.application_args[2])),
-        App.globalPut(start_time_key, on_create_start_time),
+        App.globalPut(nft_id_key, Txn.application_args[2]),             # NFT ID PASSED AS BYTES DIRECTLY (uint256)
+        App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
         App.globalPut(nft_price, Btoi(Txn.application_args[4])),
-        App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[5])),
         Approve(),
     )
 
     ##############################################################################################################################
     on_buy = Seq(
-        Assert(allowance_check(Txn.sender()) >= App.globalGet(nft_price)),
+        ###### This buy will succeed if all transfers call are valid, health/spending checks are implicits
         Seq(
-            # Fetch nft_price arc200 tokens on the escrow sale contract from buyer
-            FetchApprovedARC200ToEscrow(Txn.sender(), App.globalGet(nft_price)),
             # transfer these back to the seller
-            SendARC200ToSeller(App.globalGet(nft_price)),
+            ARC200transferFrom(Txn.sender(), App.globalGet(seller_key), App.globalGet(nft_price)),
             # transfer NFT to buyer
-            transferNFT(Txn.sender()),
+            ARC72transferFrom(Txn.sender()),
+            # Send event & transfer any fees to fee address in VOI
+            SendNoteToFees(Int(FIXED_FEE), Bytes("sale,buy,200/72")),
             Approve(),
         ),
         Reject(),
@@ -233,6 +173,7 @@ def approval_program():
             )
         ),
         Assert(new_price > Int(0)),
+        SendNoteToFees(Int(0), Bytes("sale,update,200/72")),
         ## UPDATE NEW PRICE
         App.globalPut(nft_price, new_price),
         Approve(),
@@ -244,6 +185,7 @@ def approval_program():
 
     on_call_method = Txn.application_args[0]
     on_call = Cond(
+        [on_call_method == Bytes("pre_validate"), Approve()],
         [on_call_method == Bytes("buy"), on_buy],
         [on_call_method == Bytes("update_price"), on_update_price],
     )
@@ -262,10 +204,7 @@ def approval_program():
                 Global.current_application_address(), App.globalGet(arc200_app_id_key)
             )
         ).Then(clear_state_from_app()),
-        If(
-            arc72_owner(Itob(App.globalGet(nft_id_key)))
-            == Global.current_application_address()
-        ).Then(transferNFT(App.globalGet(seller_key))),
+        SendNoteToFees(Int(0), Bytes("sale,close,200/72")),
         # send remaining funds to the seller
         closeAccountTo(App.globalGet(seller_key)),
         Approve(),

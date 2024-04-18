@@ -1,0 +1,61 @@
+ARC200->ARC72 SALE
+
+# INTERFACES SIGNATURES TO CALL EXT METHODS
+# 1. arc72_transferFrom : f2f194a0
+# 2. arc200_approve : fc7e1f43
+# 3. arc200_transferFrom : f43a105d
+
+##############################################################################
+A. Seller - sale creator side
+
+1. Create Sale APP:
+
+    app_args = [
+        encoding.decode_address(seller),
+        nftAppID.to_bytes(8, "big"),
+        nftID.to_bytes(8, "big"),
+        startTime.to_bytes(8, "big"),
+        price.to_bytes(8, "big"),
+        arc200_app_id.to_bytes(8, "big"),
+    ]
+	-> SaleAppID, SaleAppAddress
+	
+2. Fund SaleAppAddress with 200_000 voi (or less we'll see)
+		and with the ARC72 NFT
+		
+		Grouped txs:
+			a. Funding Tx with 200_000 voi
+			b. ARC72_approve from Seller to SaleAppID
+			c. (optional) opt in the ARC200 if stateful-implemented 
+
+(Optional)
+3. Can UpdatePrice and Delete SaleApp anytime, just like with VOI->ARC72 Sale
+
+##############################################################################
+B. Buyer side
+
+Grouped txs: (NOT MANDATORY)
+	a. (optional) opt in the ARC200 if needed (stateful/implementation)
+	b. ARC200_approve the Price Amount for SaleAppAddress			
+	c. pre_validate AppCall 
+			sender=buyerAddress,
+			index=SaleAppID,
+			on_complete=transaction.OnComplete.NoOpOC,
+			app_args=[b"pre_validate"],
+			accounts=[seller_address, fees_address],
+			foreign_apps=[ARC72AppID, ARC200AppID, SaleAppID],
+			sp=suggestedParams,
+	d. "buy" AppCall
+		sender=buyerAddress,
+		index=SaleAppID,
+		on_complete=transaction.OnComplete.NoOpOC,
+		app_args=[b"buy"],
+		sp=suggestedParams,
+		boxes=[(0, get_nft_id_box(nftID)),
+			(0, get_double_address_box(buyer.getAddress())),
+			(0, get_address_box(buyer.getAddress())),
+			(0, get_address_box(appAddr)),
+			], 
+			.. + ARC200 boxes? 
+			/!\ not more than 2 more box ref if possible (6/8 used above)
+
