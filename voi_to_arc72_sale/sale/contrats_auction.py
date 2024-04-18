@@ -91,6 +91,28 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
+    @Subroutine(TealType.bytes)
+    def arc72_owner() -> Expr:
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields(
+                {
+                    TxnField.type_enum: TxnType.ApplicationCall,
+                    TxnField.application_id: App.globalGet(nft_app_id_key),
+                    TxnField.applications: [
+                        App.globalGet(nft_app_id_key),
+                    ],
+                    TxnField.accounts: [Global.current_application_address()],
+                    TxnField.application_args: [
+                        Bytes("base16", "79096a14"),  # arc72_OwnerOf
+                        App.globalGet(nft_id_key),  # arg: tokenId
+                    ],
+                }
+            ),
+            InnerTxnBuilder.Submit(),
+            Return(InnerTxn.last_log()),
+        )
+
     on_create = Seq(
         App.globalPut(seller_key, Txn.application_args[0]),
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
@@ -99,8 +121,8 @@ def approval_program():
         App.globalPut(fees_address, Txn.application_args[4]),
         App.globalPut(end_time_key, Btoi(Txn.application_args[5])),
         App.globalPut(lead_bid_account_key, Global.zero_address()),  # no bidder at creation
-        App.globalPut(late_bid_delay_key, Btoi(Int(600))),  # 10 minute to delay
-        App.globalPut(lead_bid_amount_key, Btoi(Int(0))),  # 0 at initialisation, there is no bidder
+        App.globalPut(late_bid_delay_key, Int(600)),  # 10 minute to delay
+        App.globalPut(lead_bid_amount_key, Int(0)),  # 0 at initialisation, there is no bidder
         Approve(),
     )
 
@@ -127,6 +149,7 @@ def approval_program():
             App.globalPut(lead_bid_amount_key, Gtxn[on_bid_txn_index].amount()),
             App.globalPut(lead_bid_account_key, Gtxn[on_bid_txn_index].sender()),
             SendNoteToFees(Int(0), Bytes("auction,bid,1/72")),
+            # DELAY MECHANISM: extend end_time if last minute bid
             If(
                 Global.latest_timestamp() + App.globalGet(late_bid_delay_key) >= App.globalGet(end_time_key)
             ).Then(
@@ -142,51 +165,55 @@ def approval_program():
     )
 
     on_delete = Seq(
+        # Case 1. No bids on contract, then refund all remaining VOI funds to Seller
         If(
-            App.globalGet(end_time_key) <= Global.latest_timestamp()
+            App.globalGet(lead_bid_account_key) == Global.zero_address()
         ).Then(
             Seq(
-                If(
-                    App.globalGet(lead_bid_account_key) != Global.zero_address()
-                ).Then(
-                    Seq(
-                        SendNoteToFees(Int(0), Bytes("auction,close_buy,1/72")),
-                        transferNFT(App.globalGet(lead_bid_account_key))
-                    )
-                )
-                .Else(
-                    SendNoteToFees(Int(0), Bytes("auction,close_none,1/72"))
-                ),
-                closeAccountTo(App.globalGet(seller_key)),
-                Approve(),
-            )
-        ).Else(
-            Seq(
+                # Only sender/creator can close early
                 Assert(
                     Or(
-                        # sender must either be the seller or the auction creator
                         Txn.sender() == App.globalGet(seller_key),
                         Txn.sender() == Global.creator_address(),
                     )
                 ),
-                # the auction is ongoing but seller wants to cancel
-                If(
-                    App.globalGet(lead_bid_account_key) != Global.zero_address()
-                ).Then(
-                    Seq(
-                        # repay the lead bidder
-                        SendNoteToFees(Int(0), Bytes("auction,close_none,1/72")),
-                        repayPreviousLeadBidder(App.globalGet(lead_bid_account_key), App.globalGet(lead_bid_amount_key))
-                    )
-                )
-                .Else(
-                    SendNoteToFees(Int(0), Bytes("auction,close_none,1/72"))
-                ),
-                # send remaining funds to the seller
+                SendNoteToFees(Int(0), Bytes("auction,close_none,1/72")),
+                # Send all VOI funds to the seller
                 closeAccountTo(App.globalGet(seller_key)),
                 Approve(),
             )
+        ).Else(
+            # Case 2. There have been bids AND the auction successfully ended
+            If(
+                App.globalGet(end_time_key) <= Global.latest_timestamp()
+            ).Then(
+                Seq(
+                    If(
+                        arc72_owner() == App.globalGet(seller_key)
+                    ).Then(
+                        # CASE A: The seller has the ARC72, we proceed to swap
+                        # NFT -> lead_bid_account_key
+                        Seq(
+                            # Send NFT to top bidder
+                            SendNoteToFees(Int(0), Bytes("auction,close_buy,1/72")),
+                            transferNFT(App.globalGet(lead_bid_account_key))
+                        )
+                    ).Else(
+                        # CASE B: The seller doesn't actually own the ARC72,
+                        #           We refund the last bidder
+                        repayPreviousLeadBidder(
+                            App.globalGet(lead_bid_account_key),
+                            App.globalGet(lead_bid_amount_key),
+                        ),
+                        SendNoteToFees(Int(0), Bytes("auction,close_none,1/72")),
+                    ),
+                    # send remaining funds to the seller, including the payment VOI
+                    closeAccountTo(App.globalGet(seller_key)),
+                    Approve(),
+                )
+            ),
         ),
+        # Else: auction is ongoing and has bids, we have to wait for it to end.
         Reject(),
     )
 
