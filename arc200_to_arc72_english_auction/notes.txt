@@ -43,7 +43,7 @@ BidAmount must be >= reserve & >= 10% * last bid
 
 Grouped txs:
 		- ARC200_approve(SaleAppAddress, BidAmount) (can be outside of group, earlier, technically)
-		- pre_validate AppCall 
+		- "pre_validate" AppCall 
 		
 			sender=buyerAddress,
 			index=SaleAppID,
@@ -53,12 +53,12 @@ Grouped txs:
 			foreign_apps=[ARC72AppID, ARC200AppID, SaleAppID],
 			sp=suggestedParams
 			
-	    - buy AppCall with BidAmount 
+	    	- "bid" AppCall with BidAmount 
 		
 			sender=buyerAddress,
 			index=SaleAppID,
 			on_complete=transaction.OnComplete.NoOpOC,
-			app_args=[b"buy", BidAmount.to_bytes(8, "big")],
+			app_args=[b"bid", BidAmount.to_bytes(8, "big")],
 			sp=suggestedParams,
 			boxes=[(0, get_nft_id_box(nftID)),
 				(0, get_double_address_box(buyer.getAddress())),
