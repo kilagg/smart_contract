@@ -20,7 +20,7 @@ def approval_program():
     #################################### TRANSFER FUNCTIONS (external ontracts) #####################################
     #####################################   ARC72 FUNCTIONS  #####################################
     @Subroutine(TealType.none)
-    def transferNFT(to_account: Expr) -> Expr:
+    def transferFromNFT(to_account: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -83,79 +83,32 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
-    # READ ONLY ARC200 FUNCTIONS
-    @Subroutine(TealType.uint64)
-    def arc200_allowance_to_sale(owner_: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [
-                        App.globalGet(arc200_app_id_key),
-                    ],
-                    TxnField.accounts: [Global.current_application_address()],
-                    TxnField.application_args: [
-                        Bytes("base16", "bbb319f3"),  # arc200_allowance
-                        owner_,  # arg: owner
-                        Global.current_application_address(),  # arg: spender (current address)
-                    ],
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-            Return(
-                Btoi(InnerTxn.last_log())
-            ),  # last_log() is the last return value, as Bytes, convert to Int
-        )
-
-    @Subroutine(TealType.uint64)
-    def arc200_balanceOf(owner_: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [
-                        App.globalGet(arc200_app_id_key),
-                    ],
-                    TxnField.accounts: [Global.current_application_address()],
-                    TxnField.application_args: [
-                        Bytes("base16", "82e573c4"),  # arc200_balanceOf
-                        owner_,  # arg: owner
-                    ],
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-            Return(
-                Btoi(InnerTxn.last_log())
-            ),  # last_log() is the last return value, as Bytes, convert to Int
-        )
-
-    ### Optional OptIn if ARC200 is stateful app
     @Subroutine(TealType.none)
-    def OptInARC200() -> Expr:
+    def ARC200transfer(to_: Expr, amount_: Expr) -> Expr:
         return Seq(
-            # Make sure this contract is Opted in to the ARC200 before trying to transferFrom
-            # Opt-in to the payment token (ARC200) to be able to have a sale balance (if ARC200 is implemented like that?)
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
                     TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.accounts: [
-                        Gtxn[1].accounts[0],
-                        Gtxn[1].accounts[1],
-                        Global.current_application_address(),
+                    TxnField.accounts: [to_],
+                    TxnField.application_args: [
+                        Bytes("base16", "1df06e69"),  # arc200_transfer
+                        to_,                          # TO
+                        Itob(amount_),                # ARC200 Amount
                     ],
-                    TxnField.on_completion: OnComplete.OptIn,
                 }
             ),
             InnerTxnBuilder.Submit(),
         )
 
+    @Subroutine(TealType.none)
+    def repayPreviousLeadBidder(prevLeadBidder: Expr, prevLeadBidAmount: Expr) -> Expr:
+        return Seq( # refund the last bidder from the contract ARC200 funds
+            ARC200transfer(prevLeadBidder, prevLeadBidAmount)
+        )
+        
     ########################################################### LOGGING FOR INDEXER PURPOSES ######################################################
     @Subroutine(TealType.none)
     def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
@@ -174,7 +127,6 @@ def approval_program():
         )
 
     ################################################################    CLOSURE FUNCTIONS   ###########################################################
-
     @Subroutine(TealType.none)
     def closeAccountTo(account: Expr) -> Expr:
         return If(Balance(Global.current_application_address()) != Int(0)).Then(
@@ -212,38 +164,37 @@ def approval_program():
     )
 
     # Fetch Bidder ARC200 current balance and allowance towards this contract
-    allowed_ARC200_amount = arc200_allowance_to_sale(Txn.sender())
-    actual_bidder_ARC200_balance = arc200_balanceOf(Txn.sender())
+    bid_amount = Btoi(Txn.application_args[1])
     on_bid = Seq(
-        allowed_ARC200_amount,
-        actual_bidder_ARC200_balance,
         Assert(
-            # When bid is placed, check:
+            # When bid is placed, we check:
             # - if auction is still on-going
-            # - if allowance by the Buyer is correct
+            # - if the bid amount is >= reserve and >= 10% above last bid
+            # - then we immediately transfer the bid amount, ensuring that we have secured these funds
             And(
                 Global.latest_timestamp()
                 < App.globalGet(end_time_key),  # auction is not ended
-                allowed_ARC200_amount
-                >= App.globalGet(reserve_amount_key),  # greater than reserve
-                # Check if bid >= 10% above last bid
-                allowed_ARC200_amount
+                bid_amount >= App.globalGet(reserve_amount_key),  # greater than reserve
+                bid_amount
                 >= Div(Mul(App.globalGet(lead_bid_amount_key), Int(110)), Int(100)),
-                # Check if bidder isn't lying on his balance
-                actual_bidder_ARC200_balance >= allowed_ARC200_amount,
             )
         ),
         Seq(
+            # First fetch bid_amount ARC200 of the current bid: from Bidder -> Current App
+            ARC200transferFrom(
+                Txn.sender(), 
+                Global.current_application_address(), 
+                bid_amount),
+            # Then repay previous lead bidder, if it's not the first bid
             If(App.globalGet(lead_bid_account_key) != Global.zero_address()).Then(
-                # it's an approval-based auction: we don't have to repay ARC200
-                # but we can help "de-approve" for the last bidder by transfering to itself
-                ARC200transferFrom(
-                    lead_bid_account_key, lead_bid_account_key, lead_bid_amount_key
-                )  # optional de-allowance
+                repayPreviousLeadBidder(
+                    App.globalGet(lead_bid_account_key),
+                    App.globalGet(lead_bid_amount_key),
+                )
             ),
             # Update the new amount
-            App.globalPut(lead_bid_amount_key, allowed_ARC200_amount),
             App.globalPut(lead_bid_account_key, Txn.sender()),
+            App.globalPut(lead_bid_amount_key, bid_amount),
             # DELAY MECHANISM: extend end_time if last minute bid
             If(
                 Global.latest_timestamp() + App.globalGet(late_bid_delay_key)
@@ -292,29 +243,28 @@ def approval_program():
                         # CASE A: The seller has the ARC72, we proceed to swap
                         Seq(
                             # Transfer ARC72 NFT from SELLER to LEAD BIDDER
-                            transferNFT(
+                            transferFromNFT(
                                 App.globalGet(lead_bid_account_key),
                             ),
-                            # Transfer lead-bidding-amount ARC200 Token from LEAD BIDDER to SELLER
+                            # Transfer lead-bidding-amount ARC200 Token from Current App to SELLER
                             ARC200transferFrom(
-                                App.globalGet(lead_bid_account_key),
+                                Global.current_application_address(),
                                 App.globalGet(seller_key),
                                 App.globalGet(lead_bid_amount_key),
                             ),
-                            # Reset the bidding-variables to avoid repeat attack
+                            SendNoteToFees(Int(0), Bytes("auction,close_buy,200/72")),
+                            # Reset the bidding-variables to avoid repeat attack: optional
                             App.globalPut(lead_bid_amount_key, Int(0)),
                             App.globalPut(lead_bid_account_key, Global.zero_address()),
-                            SendNoteToFees(Int(0), Bytes("auction,close_buy,200/72")),
                         )
                     )
                     .Else(
                         # CASE B:   The seller doesn't actually own the ARC72
-                        #           Lead bidder keeps its ARC200 tokens, optional de-allowance below
-                        ARC200transferFrom(
-                            lead_bid_account_key,
-                            lead_bid_account_key,
-                            lead_bid_amount_key,
-                        ),  # optional de-allowance
+                        #           Refund latest bidder
+                        repayPreviousLeadBidder(
+                            App.globalGet(lead_bid_account_key),
+                            App.globalGet(lead_bid_amount_key),
+                        ),
                         SendNoteToFees(Int(0), Bytes("auction,close_refund,200/72")),
                     ),
                     # send remaining VOI funds to the seller
