@@ -13,7 +13,7 @@ A. Seller - sale creator side
     app_args = [
         encoding.decode_address(seller),
         nftAppID.to_bytes(8, "big"),
-        nftID.to_bytes(8, "big"),
+        nftID.to_bytes(32, "big"),
         startTime.to_bytes(8, "big"),
         price.to_bytes(8, "big"),
         arc200_app_id.to_bytes(8, "big"),
