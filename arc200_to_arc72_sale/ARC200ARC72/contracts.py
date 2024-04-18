@@ -1,9 +1,8 @@
 from pyteal import *
 
 
-# arc72_transferFrom -> f43a105d
+# arc72_transferFrom -> f2f194a0
 # arc200_transfer -> 1df06e69
-# arc200_allowance -> bbb319f3
 
 FIXED_FEE = 0
 def approval_program():
@@ -26,10 +25,10 @@ def approval_program():
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.applications: [App.globalGet(nft_app_id_key)],
                 TxnField.application_args: [
-                    Bytes("base16", "f2f194a0"),    # arc72_transferFrom
-                    App.globalGet(seller_key),
-                    to_account,
-                    App.globalGet(nft_id_key)
+                    Bytes("base16", "f2f194a0"),            # arc72_transferFrom
+                    App.globalGet(seller_key),              # FROM: the seller who previously approved client side
+                    to_account,                             # TO
+                    App.globalGet(nft_id_key)               # the NFT ID in question
                 ],
             }),
             InnerTxnBuilder.Submit(),
@@ -51,8 +50,8 @@ def approval_program():
                     TxnField.application_args: [
                         Bytes("base16", "f43a105d"),                # arc200_transferFrom
                         from_,                                      # FROM: approver/owner
-                        to_,                                        # TO: input
-                        Itob(amount_),                              # Amount
+                        to_,                                        # TO
+                        Itob(amount_),                              # ARC200 Amount
                     ],
                 }
             ),
