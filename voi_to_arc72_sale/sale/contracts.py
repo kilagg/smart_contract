@@ -105,12 +105,11 @@ def approval_program():
     new_price = Btoi(Txn.application_args[1])
     on_update_price = Seq(
         Assert(
-            Or(
+            And(
                 Txn.sender() == App.globalGet(seller_key),
-                Txn.sender() == Global.creator_address()
+                new_price > Int(0)
             )
         ),
-        Assert(new_price > Int(0)),
         Seq(
             App.globalPut(nft_price, new_price),
             SendNoteToFees(Int(0), Bytes("sale,update,1/72")),
