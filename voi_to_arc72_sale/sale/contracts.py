@@ -84,14 +84,14 @@ def approval_program():
 
     on_buy_txn_index = Txn.group_index() - Int(1)
     on_buy = Seq(
-        # Assert(
-        #     And(
-        #         Gtxn[on_buy_txn_index].amount() == Itob(App.globalGet(nft_price)),
-        #         Gtxn[on_buy_txn_index].receiver() == Global.current_application_address()
-        #         # Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
-        #         # Gtxn[on_buy_txn_index].sender() == Txn.sender(),
-        #     )
-        # ),
+        Assert(
+            And(
+                Gtxn[on_buy_txn_index].amount() == App.globalGet(nft_price),
+                Gtxn[on_buy_txn_index].receiver() == Global.current_application_address(),
+                Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
+                Gtxn[on_buy_txn_index].sender() == Txn.sender(),
+            )
+        ),
         Seq(
             SendNoteToFees(Int(0), Bytes("sale,buy,1/72")),
             SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()-Int(0)),  # pay seller immediately
