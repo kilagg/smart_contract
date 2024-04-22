@@ -58,29 +58,6 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
-    ######################################## Optional OptIn if ARC200 is stateful app ############################################
-    @Subroutine(TealType.none)
-    def OptInARC200() -> Expr:
-        return Seq(
-            # Make sure this contract is Opted in to the ARC200 before trying to transferFrom
-            # Opt-in to the payment token (ARC200) to be able to have a sale balance (if ARC200 is implemented like that?)
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.accounts: [
-                        Gtxn[1].accounts[0],
-                        Gtxn[1].accounts[1],
-                        Global.current_application_address(),
-                    ],
-                    TxnField.on_completion: OnComplete.OptIn,
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
-
     ########################################################### LOGGING FOR INDEXER PURPOSES ######################################################
     @Subroutine(TealType.none)
     def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
