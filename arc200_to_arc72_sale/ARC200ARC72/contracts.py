@@ -217,7 +217,7 @@ def clear_state_program():
 
 if __name__ == "__main__":
     with open("approval.teal", "w") as f:
-        compiled = compileTeal(approval_program(), mode=Mode.Application, version=9)
+        compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
         f.write(compiled)
 
     with open("clear_state.teal", "w") as f:
