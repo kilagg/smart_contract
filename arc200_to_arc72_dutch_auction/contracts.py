@@ -146,9 +146,8 @@ def approval_program():
             # Attempt to transfer from Sender (bid/buyer), to seller, for the proposed valid bid amount  
             ARC200transferFrom(Txn.sender(), App.globalGet(seller_key), arc200_bid_amount),
             transferNFT(Txn.sender()), # send the NFT to the buyer
-            Approve()
         ),
-        Reject(),
+        Approve(),
     )
 
     on_call_method = Txn.application_args[0]
