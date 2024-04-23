@@ -40,7 +40,7 @@ def approval_program():
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: 28500,
+                    TxnField.amount: Int(28500),
                     TxnField.sender: Global.current_application_address(),
                     TxnField.receiver: AppParam.address(App.globalGet(arc200_app_id_key))
                 }
