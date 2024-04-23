@@ -70,7 +70,6 @@ def approval_program():
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
                     TxnField.accounts: [
                         from_,
                         to_
