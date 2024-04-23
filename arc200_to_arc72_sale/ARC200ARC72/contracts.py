@@ -50,17 +50,14 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
+    def ARC200transferFrom(to_: Expr, amount_: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.accounts: [
-                        from_,
-                        to_
-                    ],
+                    TxnField.accounts: [to_],
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),                # arc200_transferFrom
                         to_,                                        # TO
@@ -124,7 +121,7 @@ def approval_program():
         Seq(
             # transfer these back to the seller
             ARC200fund(),
-            ARC200transferFrom(Txn.sender(), App.globalGet(seller_key), App.globalGet(nft_price)),
+            ARC200transferFrom(App.globalGet(seller_key), App.globalGet(nft_price)),
             # transfer NFT to buyer
             ARC72transferFrom(Txn.sender()),
             # Send event & transfer any fees to fee address in VOI
