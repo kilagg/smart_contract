@@ -119,7 +119,7 @@ def approval_program():
         # Check that max price > min price
         Assert(App.globalGet(nft_max_price) >= App.globalGet(nft_min_price)),
         # Check that start_time > end_time
-        Assert(end_time_key > start_time_key),
+        Assert(App.globalGet(end_time_key) > App.globalGet(start_time_key)),
         Approve(),
     )
 
@@ -176,7 +176,6 @@ def approval_program():
             Reject(),
         ],
     )
-
     return program
 
 
