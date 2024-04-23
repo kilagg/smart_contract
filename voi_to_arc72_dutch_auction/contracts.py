@@ -140,7 +140,7 @@ def approval_program():
             transferNFT(Gtxn[on_buy_txn_index].sender()), # send the NFT to the buyer
             Approve()
         ),
-        Reject(),
+        Approve(),
     )
 
     on_call_method = Txn.application_args[0]
