@@ -23,7 +23,6 @@ def approval_program():
                 TxnField.type_enum: TxnType.ApplicationCall,
                 TxnField.application_id: App.globalGet(nft_app_id_key),
                 TxnField.on_completion: OnComplete.NoOp,
-                TxnField.applications: [App.globalGet(nft_app_id_key)],
                 TxnField.application_args: [
                     Bytes("base16", "f2f194a0"),            # arc72_transferFrom
                     App.globalGet(seller_key),              # FROM: the seller who previously approved client side
@@ -42,7 +41,6 @@ def approval_program():
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
                     TxnField.accounts: [
                         from_,
                         to_
@@ -92,27 +90,6 @@ def approval_program():
             )
         )
 
-    @Subroutine(TealType.none)
-    def clear_state_from_app() -> Expr:
-        return Seq(
-            [
-                InnerTxnBuilder.Begin(),
-                InnerTxnBuilder.SetFields(
-                    {
-                        TxnField.type_enum: TxnType.ApplicationCall,
-                        TxnField.application_id: App.globalGet(arc200_app_id_key),
-                        TxnField.applications: [
-                            App.globalGet(arc200_app_id_key),
-                            App.globalGet(nft_app_id_key),
-                        ],
-                        TxnField.accounts: [Global.current_application_address()],
-                        TxnField.on_completion: OnComplete.ClearState,  # Opt-out of the ARC200 contract
-                    }
-                ),
-                InnerTxnBuilder.Submit(),
-            ]
-        )
-
     ################################################################################################################################################
     # SETUP
     on_create = Seq(
@@ -134,9 +111,8 @@ def approval_program():
             ARC72transferFrom(Txn.sender()),
             # Send event & transfer any fees to fee address in VOI
             SendNoteToFees(Int(FIXED_FEE), Bytes("sale,buy,200/72")),
-            Approve(),
         ),
-        Reject(),
+        Approve()
     )
 
     ################################################################################################################################################
@@ -175,12 +151,6 @@ def approval_program():
                 Txn.sender() == Global.creator_address(),
             )
         ),
-        # Check if current app is opted into ARC200 app
-        If(
-            App.optedIn(
-                Global.current_application_address(), App.globalGet(arc200_app_id_key)
-            )
-        ).Then(clear_state_from_app()),
         SendNoteToFees(Int(0), Bytes("sale,close,200/72")),
         # send remaining funds to the seller
         closeAccountTo(App.globalGet(seller_key)),
@@ -217,9 +187,9 @@ def clear_state_program():
 
 if __name__ == "__main__":
     with open("approval.teal", "w") as f:
-        compiled = compileTeal(approval_program(), mode=Mode.Application, version=9)
+        compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
         f.write(compiled)
 
     with open("clear_state.teal", "w") as f:
-        compiled = compileTeal(clear_state_program(), mode=Mode.Application, version=9)
+        compiled = compileTeal(clear_state_program(), mode=Mode.Application, version=10)
         f.write(compiled)
