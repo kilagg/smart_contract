@@ -25,6 +25,7 @@ def approval_program():
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.application_args: [
                     Bytes("base16", "f2f194a0"),            # arc72_transferFrom
+                    App.globalGet(seller_key),              # FROM: the seller who previously approved client side
                     to_account,                             # TO
                     App.globalGet(nft_id_key)               # the NFT ID in question
                 ],
@@ -61,7 +62,6 @@ def approval_program():
                     ],
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),                # arc200_transferFrom
-                        from_,                                      # FROM: approver/owner
                         to_,                                        # TO
                         amount_,                              # ARC200 Amount
                     ],
