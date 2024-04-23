@@ -13,6 +13,7 @@ def approval_program():
     arc200_app_id_key = Bytes("arc200_app_id")  # parameter for ARC-200 asset ID
     nft_price = Bytes("price")
     fees_address = Bytes("fees_address")
+    nft_app_address = Bytes("nft_app_address")
 
     #################################### TRANSFER FUNCTIONS : calling external token/nft contracts #####################################
     @Subroutine(TealType.none)
@@ -42,7 +43,7 @@ def approval_program():
                     TxnField.type_enum: TxnType.Payment,
                     TxnField.amount: Int(28500),
                     TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: AppParam.address(App.globalGet(arc200_app_id_key))
+                    TxnField.receiver: App.globalGet(nft_app_address)
                 }
             ),
             InnerTxnBuilder.Submit(),
@@ -63,7 +64,7 @@ def approval_program():
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),                # arc200_transferFrom
                         to_,                                        # TO
-                        amount_,                              # ARC200 Amount
+                        Itob(amount_),                              # ARC200 Amount
                     ],
                 }
             ),
@@ -113,6 +114,7 @@ def approval_program():
         App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
         App.globalPut(nft_price, Btoi(Txn.application_args[4])),
         App.globalPut(fees_address, Txn.application_args[5]),
+        App.globalPut(nft_app_address, Txn.application_args[6]),
         Approve(),
     )
 
