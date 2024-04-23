@@ -188,6 +188,6 @@ def approval_program():
 
 if __name__ == "__main__":
 
-    with open("algo_arc72_dutch_approval.teal", "w") as f:
+    with open("arc200_arc72_dutch_approval.teal", "w") as f:
         compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
         f.write(compiled)
