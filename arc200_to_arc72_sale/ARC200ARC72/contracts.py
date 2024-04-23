@@ -34,6 +34,21 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
+    def ARC200fund() -> Expr:
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.SetFields(
+                {
+                    TxnField.type_enum: TxnType.Payment,
+                    TxnField.amount: 28500,
+                    TxnField.sender: Global.current_application_address(),
+                    TxnField.receiver: AppParam.address(App.globalGet(arc200_app_id_key))
+                }
+            ),
+            InnerTxnBuilder.Submit(),
+        )
+
+    @Subroutine(TealType.none)
     def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
@@ -46,10 +61,10 @@ def approval_program():
                         to_
                     ],
                     TxnField.application_args: [
-                        Bytes("base16", "f43a105d"),                # arc200_transferFrom
+                        Bytes("base16", "da7025b9"),                # arc200_transferFrom
                         from_,                                      # FROM: approver/owner
                         to_,                                        # TO
-                        Itob(amount_),                              # ARC200 Amount
+                        amount_,                              # ARC200 Amount
                     ],
                 }
             ),
@@ -95,9 +110,10 @@ def approval_program():
     on_create = Seq(
         App.globalPut(seller_key, Txn.application_args[0]),
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
-        App.globalPut(nft_id_key, Txn.application_args[2]),             # NFT ID PASSED AS BYTES DIRECTLY (uint256)
+        App.globalPut(nft_id_key, Txn.application_args[2]),
         App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
         App.globalPut(nft_price, Btoi(Txn.application_args[4])),
+        App.globalPut(fees_address, Txn.application_args[5]),
         Approve(),
     )
 
@@ -106,6 +122,7 @@ def approval_program():
         ###### This buy will succeed if all transfers call are valid, health/spending checks are implicits
         Seq(
             # transfer these back to the seller
+            ARC200fund(),
             ARC200transferFrom(Txn.sender(), App.globalGet(seller_key), App.globalGet(nft_price)),
             # transfer NFT to buyer
             ARC72transferFrom(Txn.sender()),
