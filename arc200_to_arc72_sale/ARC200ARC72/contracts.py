@@ -50,19 +50,18 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def ARC200transferFrom(to_: Expr, amount_: Expr) -> Expr:
+    def ARC200transferFrom() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.accounts: [to_],
                     TxnField.application_args: [
-                        Bytes("base16", "da7025b9"),                # arc200_transferFrom
-                        to_,                                        # TO
-                        Itob(amount_),                              # ARC200 Amount
-                    ],
+                        Bytes("base16", "da7025b9"),
+                        App.globalGet(seller_key),
+                        Itob(App.globalGet(nft_price))
+                    ]
                 }
             ),
             InnerTxnBuilder.Submit(),
@@ -121,7 +120,7 @@ def approval_program():
         Seq(
             # transfer these back to the seller
             ARC200fund(),
-            ARC200transferFrom(App.globalGet(seller_key), App.globalGet(nft_price)),
+            ARC200transferFrom(),
             # transfer NFT to buyer
             ARC72transferFrom(Txn.sender()),
             # Send event & transfer any fees to fee address in VOI
@@ -134,15 +133,12 @@ def approval_program():
     new_price = Btoi(Txn.application_args[1])
     on_update_price = Seq(
         Assert(
-            Or(
-                # sender must either be the seller or the Sale creator
-                Txn.sender() == App.globalGet(seller_key),
+            And(
+                new_price > Int(0),
                 Txn.sender() == Global.creator_address(),
             )
         ),
-        Assert(new_price > Int(0)),
         SendNoteToFees(Int(0), Bytes("sale,update,200/72")),
-        ## UPDATE NEW PRICE
         App.globalPut(nft_price, new_price),
         Approve(),
     )
