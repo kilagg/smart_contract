@@ -61,7 +61,7 @@ def approval_program():
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),
                         App.globalGet(seller_key),
-                        Itob(App.globalGet(nft_price))
+                        App.globalGet(nft_price)
                     ]
                 }
             ),
@@ -109,7 +109,7 @@ def approval_program():
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
         App.globalPut(nft_id_key, Txn.application_args[2]),
         App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
-        App.globalPut(nft_price, Btoi(Txn.application_args[4])),
+        App.globalPut(nft_price, Txn.application_args[4]),
         App.globalPut(fees_address, Txn.application_args[5]),
         App.globalPut(nft_app_address, Txn.application_args[6]),
         Approve(),
