@@ -57,6 +57,7 @@ def approval_program():
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(arc200_app_id_key),
+                    TxnField.on_completion: OnComplete.NoOp,
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),
                         App.globalGet(seller_key),
