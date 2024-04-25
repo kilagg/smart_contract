@@ -85,6 +85,8 @@ def approval_program():
         App.globalPut(fees_address, Txn.application_args[5]),
         App.globalPut(start_time_key, Btoi(Txn.application_args[6])),
         App.globalPut(end_time_key, Btoi(Txn.application_args[7])),
+        Assert(App.globalGet(nft_max_price) >= App.globalGet(nft_min_price)),
+        Assert(App.globalGet(end_time_key) > App.globalGet(start_time_key)),
         Approve(),
     )
 
@@ -93,9 +95,9 @@ def approval_program():
         Assert(
             And(
                 # formula to compute price is y = (((max-min)/(start-end)) * (current_time - start )) + max
-
-                Gtxn[on_buy_txn_index].amount() >= Add(
-                    Itob(App.globalGet(nft_max_price)),
+                # new formula : max - (current-start)((max-min)/(end-start))
+                Gtxn[on_buy_txn_index].amount() >= Minus(
+                    App.globalGet(nft_max_price),
                     Mul(
                         Minus(
                             Global.latest_timestamp(),
@@ -107,8 +109,8 @@ def approval_program():
                                  Itob(App.globalGet(nft_min_price))
                              ),
                              Minus(
-                                App.globalGet(start_time_key),
-                                App.globalGet(end_time_key)
+                                App.globalGet(end_time_key),
+                                 App.globalGet(start_time_key)
                              )
                         )
                     )
