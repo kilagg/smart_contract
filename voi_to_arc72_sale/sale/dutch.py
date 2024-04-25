@@ -105,8 +105,8 @@ def approval_program():
                         ),
                         Div(
                              Minus(
-                                 Itob(App.globalGet(nft_max_price)),
-                                 Itob(App.globalGet(nft_min_price))
+                                 App.globalGet(nft_max_price),
+                                 App.globalGet(nft_min_price)
                              ),
                              Minus(
                                 App.globalGet(end_time_key),
