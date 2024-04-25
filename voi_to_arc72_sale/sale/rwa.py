@@ -68,7 +68,7 @@ def approval_program():
     on_buy = Seq(
         Assert(
             And(
-                Gtxn[on_buy_txn_index].amount() == Itob(App.globalGet(price)),
+                Gtxn[on_buy_txn_index].amount() == App.globalGet(price),
                 Gtxn[on_buy_txn_index].receiver() == Global.current_application_address(),
                 Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
                 Gtxn[on_buy_txn_index].sender() == Txn.sender(),
@@ -85,12 +85,11 @@ def approval_program():
     new_price = Btoi(Txn.application_args[1])
     on_update_price = Seq(
         Assert(
-            Or(
+            And(
                 Txn.sender() == App.globalGet(seller_key),
-                Txn.sender() == Global.creator_address()
+                new_price > Int(0)
             )
         ),
-        Assert(new_price > Int(0)),
         Seq(
             App.globalPut(price, new_price),
             SendNoteToFees(Int(0), Bytes("sale,update,1/rwa")),
