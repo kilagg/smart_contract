@@ -1,9 +1,9 @@
 from pyteal import *
+from all_contrat.constants import FEES_ADDRESS, FEES
 
 
 def approval_program():
     # PARAMETERS
-    seller_key = Bytes("seller")
     nft_id_key = Bytes("nft_id")
     nft_app_id_key = Bytes("nft_app_id")
     nft_max_price = Bytes("max_price")
@@ -13,7 +13,7 @@ def approval_program():
     end_time_key = Bytes("end")
 
     @Subroutine(TealType.none)
-    def transferNFT(to_account: Expr) -> Expr:
+    def function_transfert_nft(to_account: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields({
@@ -22,7 +22,7 @@ def approval_program():
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.application_args: [
                     Bytes("base16", "f2f194a0"),
-                    App.globalGet(seller_key),
+                    Global.creator_address(),
                     to_account,
                     App.globalGet(nft_id_key)
                 ],
@@ -31,7 +31,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def SendAlgoToSeller(amount: Expr) -> Expr:
+    def function_pay_seller(amount: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -39,14 +39,14 @@ def approval_program():
                     TxnField.type_enum: TxnType.Payment,
                     TxnField.amount: amount,
                     TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: App.globalGet(seller_key),
+                    TxnField.receiver: Global.creator_address(),
                 }
             ),
             InnerTxnBuilder.Submit(),
         )
 
     @Subroutine(TealType.none)
-    def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
+    def function_send_note(amount: Expr, note: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -62,7 +62,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def closeAccountTo(account: Expr) -> Expr:
+    def function_close_app(account: Expr) -> Expr:
         return If(Balance(Global.current_application_address()) != Int(0)).Then(
             Seq(
                 InnerTxnBuilder.Begin(),
@@ -77,26 +77,24 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(seller_key, Txn.application_args[0]),
-        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
-        App.globalPut(nft_id_key, Txn.application_args[2]),
-        App.globalPut(nft_max_price, Btoi(Txn.application_args[3])),
-        App.globalPut(nft_min_price, Btoi(Txn.application_args[4])),
-        App.globalPut(fees_address, Txn.application_args[5]),
-        App.globalPut(start_time_key, Btoi(Txn.application_args[6])),
-        App.globalPut(end_time_key, Btoi(Txn.application_args[7])),
+        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[0])),
+        App.globalPut(nft_id_key, Txn.application_args[1]),
+        App.globalPut(nft_max_price, Btoi(Txn.application_args[2])),
+        App.globalPut(nft_min_price, Btoi(Txn.application_args[3])),
+        App.globalPut(fees_address, Txn.application_args[4]),
+        App.globalPut(end_time_key, Btoi(Txn.application_args[5])),
+        App.globalPut(start_time_key, Global.latest_timestamp()),
         Assert(App.globalGet(nft_max_price) >= App.globalGet(nft_min_price)),
         Assert(App.globalGet(end_time_key) > App.globalGet(start_time_key)),
         Approve(),
     )
 
-    on_buy_txn_index = Txn.group_index() - Int(1)
     on_buy = Seq(
         Assert(
             And(
                 # formula to compute price is y = (((max-min)/(start-end)) * (current_time - start )) + max
                 # new formula : max - (current-start)((max-min)/(end-start))
-                Gtxn[on_buy_txn_index].amount() >= Minus(
+                Gtxn[Txn.group_index() - Int(1)].amount() >= Minus(
                     App.globalGet(nft_max_price),
                     Mul(
                         Minus(
@@ -109,51 +107,46 @@ def approval_program():
                                  App.globalGet(nft_min_price)
                              ),
                              Minus(
-                                App.globalGet(end_time_key),
+                                 App.globalGet(end_time_key),
                                  App.globalGet(start_time_key)
                              )
                         )
                     )
                 ),
-                Gtxn[on_buy_txn_index].receiver() == Global.current_application_address(),
-                Gtxn[on_buy_txn_index].type_enum() == TxnType.Payment,
-                Gtxn[on_buy_txn_index].sender() == Txn.sender()
+                Global.latest_timestamp() <= App.globalGet(end_time_key),
+                Gtxn[Txn.group_index() - Int(1)].receiver() == Global.current_application_address(),
+                Gtxn[Txn.group_index() - Int(1)].type_enum() == TxnType.Payment,
+                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender()
             )
         ),
         Seq(
-            SendNoteToFees(Int(0), Bytes("dutch,buy,1/72")),
-            SendAlgoToSeller(Gtxn[on_buy_txn_index].amount()-Int(0)),  # pay seller immediately
-            transferNFT(Gtxn[on_buy_txn_index].sender()), # send the NFT to the seller.
+            function_send_note(Int(0), Bytes("dutch,buy,1/72")),
+            function_pay_seller(Gtxn[Txn.group_index() - Int(1)].amount()-Int(FEES)),
+            function_transfert_nft(Gtxn[Txn.group_index() - Int(1)].sender()),
+            function_close_app(Global.creator_address()),
             Approve()
         ),
         Reject(),
     )
 
-    on_call_method = Txn.application_args[0]
     on_call = Cond(
-        [on_call_method == Bytes("pre_validate"), Approve()],
-        [on_call_method == Bytes("buy"), on_buy]
+        [Txn.application_args[0] == Bytes("pre_validate"), Approve()],
+        [Txn.application_args[0] == Bytes("buy"), on_buy]
     )
 
     on_delete = Seq(
         Assert(
-            Or(
-                Txn.sender() == App.globalGet(seller_key),
-                Txn.sender() == Global.creator_address()
-            )
+            Txn.sender() == Global.creator_address()
         ),
-        SendNoteToFees(Int(0), Bytes("dutch,close,1/72")),
-        closeAccountTo(App.globalGet(seller_key)),
+        function_send_note(Int(0), Bytes("dutch,close,1/72")),
+        function_close_app(Global.creator_address()),
         Approve(),
     )
 
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
         [Txn.on_completion() == OnComplete.NoOp, on_call],
-        [
-            Txn.on_completion() == OnComplete.DeleteApplication,
-            on_delete,
-        ],
+        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
         [
             Or(
                 Txn.on_completion() == OnComplete.OptIn,
