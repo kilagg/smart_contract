@@ -29,7 +29,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def ARC200fund() -> Expr:
+    def function_arc200_fund() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -44,7 +44,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def ARC200transferFrom() -> Expr:
+    def function_arc200_transfer() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -95,19 +95,19 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
-        App.globalPut(nft_id_key, Txn.application_args[2]),
-        App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
-        App.globalPut(nft_price, Txn.application_args[4]),
-        App.globalPut(fees_address, Txn.application_args[5]),
-        App.globalPut(nft_app_address, Txn.application_args[6]),
+        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[0])),
+        App.globalPut(nft_id_key, Txn.application_args[1]),
+        App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[2])),
+        App.globalPut(nft_price, Txn.application_args[3]),
+        App.globalPut(fees_address, Txn.application_args[4]),
+        App.globalPut(nft_app_address, Txn.application_args[5]),
         Approve(),
     )
 
     on_buy = Seq(
         Seq(
-            ARC200fund(),
-            ARC200transferFrom(),
+            function_arc200_fund(),
+            function_arc200_transfer(),
             function_transfert_nft(Txn.sender()),
             function_send_note(Int(FEES), Bytes("sale,buy,200/72")),
         ),
