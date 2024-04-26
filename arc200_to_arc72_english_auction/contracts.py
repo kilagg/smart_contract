@@ -63,7 +63,7 @@ def approval_program():
 
     #####################################   ARC200 FUNCTIONS  #####################################
     @Subroutine(TealType.none)
-    def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
+    def ARC200transfer(to_: Expr, amount_: Expr) -> Expr:
         zero_padding = BytesZero(Int(24))
         byte_slice_amount = Itob(amount_)
         full_32_byte_amount = Concat(byte_slice_amount, zero_padding)
@@ -73,33 +73,13 @@ def approval_program():
                 TxnField.type_enum: TxnType.ApplicationCall,
                 TxnField.application_id: App.globalGet(arc200_app_id_key),
                 TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                TxnField.accounts: [from_, to_],
+                TxnField.accounts: [to_],
                 TxnField.application_args: [
                     Bytes("base16", "da7025b9"),  # arc200_transfer
                     to_,  # TO
                     full_32_byte_amount,  # ARC200 Amount
                 ],
             }),
-            InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def ARC200transfer(to_: Expr, amount_: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                    TxnField.accounts: [to_],
-                    TxnField.application_args: [
-                        Bytes("base16", "1df06e69"),  # arc200_transfer
-                        to_,                          # TO
-                        Itob(amount_),                # ARC200 Amount
-                    ],
-                }
-            ),
             InnerTxnBuilder.Submit(),
         )
 
@@ -181,8 +161,8 @@ def approval_program():
         ),
         Seq(
             # First fetch bid_amount ARC200 of the current bid: from Bidder -> Current App
-            ARC200transferFrom(
-                Txn.sender(), 
+            # Check we have the ARC200 transfered to the contract by sending it to ourself (auction)
+            ARC200transfer(
                 Global.current_application_address(), 
                 bid_amount),
             # Then repay previous lead bidder, if it's not the first bid
@@ -248,8 +228,7 @@ def approval_program():
                                 App.globalGet(lead_bid_account_key),
                             ),
                             # Transfer lead-bidding-amount ARC200 Token from Current App to SELLER
-                            ARC200transferFrom(
-                                Global.current_application_address(),
+                            ARC200transfer(
                                 App.globalGet(seller_key),
                                 App.globalGet(lead_bid_amount_key),
                             ),
