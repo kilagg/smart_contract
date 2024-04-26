@@ -1,9 +1,8 @@
 from pyteal import *
-
+from all_contrat.constants import FEES_ADDRESS, FEES
 
 def approval_program():
     # PARAMETERS
-    seller_key = Bytes("seller")
     nft_id_key = Bytes("nft_id")
     nft_app_id_key = Bytes("nft_app_id")
     arc200_app_id_key = Bytes("arc200_app_id")
@@ -12,7 +11,7 @@ def approval_program():
     nft_app_address = Bytes("nft_app_address")
 
     @Subroutine(TealType.none)
-    def ARC72transferFrom(to_account: Expr) -> Expr:
+    def function_transfert_nft(to_account: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields({
@@ -21,7 +20,7 @@ def approval_program():
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.application_args: [
                     Bytes("base16", "f2f194a0"),
-                    App.globalGet(seller_key),
+                    Global.creator_address(),
                     to_account,
                     App.globalGet(nft_id_key)
                 ],
@@ -55,7 +54,7 @@ def approval_program():
                     TxnField.on_completion: OnComplete.NoOp,
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),
-                        App.globalGet(seller_key),
+                        Global.creator_address(),
                         App.globalGet(nft_price)
                     ]
                 }
@@ -64,7 +63,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def SendNoteToFees(amount: Expr, note: Expr) -> Expr:
+    def function_send_note(amount: Expr, note: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -79,15 +78,16 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
+
     @Subroutine(TealType.none)
-    def closeAccountTo() -> Expr:
+    def function_close_app() -> Expr:
         return If(Balance(Global.current_application_address()) != Int(0)).Then(
             Seq(
                 InnerTxnBuilder.Begin(),
                 InnerTxnBuilder.SetFields(
                     {
                         TxnField.type_enum: TxnType.Payment,
-                        TxnField.close_remainder_to: App.globalGet(seller_key),
+                        TxnField.close_remainder_to: Global.creator_address(),
                     }
                 ),
                 InnerTxnBuilder.Submit(),
@@ -95,7 +95,6 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(seller_key, Txn.application_args[0]),
         App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
         App.globalPut(nft_id_key, Txn.application_args[2]),
         App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[3])),
@@ -109,36 +108,34 @@ def approval_program():
         Seq(
             ARC200fund(),
             ARC200transferFrom(),
-            ARC72transferFrom(Txn.sender()),
-            SendNoteToFees(Int(0), Bytes("sale,buy,200/72")),
+            function_transfert_nft(Txn.sender()),
+            function_send_note(Int(FEES), Bytes("sale,buy,200/72")),
         ),
         Approve()
     )
 
-    new_price = Btoi(Txn.application_args[1])
     on_update_price = Seq(
         Assert(
             And(
-                new_price > Int(0),
+                Btoi(Txn.application_args[1]) > Int(0),
                 Txn.sender() == Global.creator_address(),
             )
         ),
-        SendNoteToFees(Int(0), Bytes("sale,update,200/72")),
-        App.globalPut(nft_price, new_price),
+        function_send_note(Int(0), Bytes("sale,update,200/72")),
+        App.globalPut(nft_price, Btoi(Txn.application_args[1])),
         Approve(),
     )
 
-    on_call_method = Txn.application_args[0]
     on_call = Cond(
-        [on_call_method == Bytes("pre_validate"), Approve()],
-        [on_call_method == Bytes("buy"), on_buy],
-        [on_call_method == Bytes("update_price"), on_update_price],
+        [Txn.application_args[0] == Bytes("pre_validate"), Approve()],
+        [Txn.application_args[0] == Bytes("buy"), on_buy],
+        [Txn.application_args[0] == Bytes("update_price"), on_update_price],
     )
 
     on_delete = Seq(
-        Assert(Txn.sender() == App.globalGet(seller_key)),
-        SendNoteToFees(Int(0), Bytes("sale,close,200/72")),
-        closeAccountTo(),
+        Assert(Txn.sender() == Global.creator_address()),
+        function_send_note(Int(0), Bytes("sale,close,200/72")),
+        function_close_app(),
         Approve(),
     )
 
@@ -160,16 +157,15 @@ def approval_program():
 
 
 if __name__ == "__main__":
-    with open("approval.teal", "w") as f:
-        compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
-        from algosdk.v2client.algod import AlgodClient
+    compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
+    from algosdk.v2client.algod import AlgodClient
 
-        algod_token_tx = ""
-        headers_tx = {"X-Algo-API-Token": algod_token_tx}
-        client = AlgodClient(
-            algod_token=algod_token_tx,
-            algod_address="https://testnet-api.voi.nodly.io:443",
-            headers=headers_tx,
-        )
-        print(client.compile(compiled)['result'])
-        f.write(compiled)
+    algod_token_tx = ""
+    headers_tx = {"X-Algo-API-Token": algod_token_tx}
+    client = AlgodClient(
+        algod_token=algod_token_tx,
+        algod_address="https://testnet-api.voi.nodly.io:443",
+        headers=headers_tx,
+    )
+    print(client.compile(compiled)['result'])
+    print("ok")
