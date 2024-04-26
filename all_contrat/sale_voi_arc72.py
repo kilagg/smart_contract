@@ -59,14 +59,14 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def function_close_app(account: Expr) -> Expr:
+    def function_close_app() -> Expr:
         return If(Balance(Global.current_application_address()) != Int(0)).Then(
             Seq(
                 InnerTxnBuilder.Begin(),
                 InnerTxnBuilder.SetFields(
                     {
                         TxnField.type_enum: TxnType.Payment,
-                        TxnField.close_remainder_to: account,
+                        TxnField.close_remainder_to: Global.creator_address(),
                     }
                 ),
                 InnerTxnBuilder.Submit(),
@@ -94,7 +94,7 @@ def approval_program():
             function_send_note(Int(0), Bytes("sale,buy,1/72")),
             function_pay_seller(),
             function_transfert_nft(Gtxn[Txn.group_index() - Int(1)].sender()),
-            function_close_app(Global.creator_address()),
+            function_close_app(),
             Approve()
         ),
         Reject(),
@@ -126,7 +126,7 @@ def approval_program():
             Txn.sender() == Global.creator_address()
         ),
         function_send_note(Int(0), Bytes("sale,close,1/72")),
-        function_close_app(Global.creator_address()),
+        function_close_app(),
         Approve(),
     )
 
