@@ -148,17 +148,15 @@ def approval_program():
 
 
 if __name__ == "__main__":
+    compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
+    from algosdk.v2client.algod import AlgodClient
 
-    with open("algo_arc72_sale_approval.teal", "w") as f:
-        compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
-        from algosdk.v2client.algod import AlgodClient
-
-        algod_token_tx = ""
-        headers_tx = {"X-Algo-API-Token": algod_token_tx}
-        client = AlgodClient(
-            algod_token=algod_token_tx,
-            algod_address="https://testnet-api.voi.nodly.io:443",
-            headers=headers_tx,
-        )
-        print(client.compile(compiled)['result'])
-        f.write(compiled)
+    algod_token_tx = ""
+    headers_tx = {"X-Algo-API-Token": algod_token_tx}
+    client = AlgodClient(
+        algod_token=algod_token_tx,
+        algod_address="https://testnet-api.voi.nodly.io:443",
+        headers=headers_tx,
+    )
+    print(client.compile(compiled)['result'])
+    print("ended")
