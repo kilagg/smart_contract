@@ -64,24 +64,24 @@ def approval_program():
 
     @Subroutine(TealType.none)
     def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
+        zero_padding = BytesZero(Int(24))
+        byte_slice_amount = Itob(amount_)
+        full_32_byte_amount = Concat(byte_slice_amount, zero_padding)
         return Seq(
             InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
-                    TxnField.accounts: [
-                        from_,
-                        to_
-                    ],
-                    TxnField.application_args: [
-                        Bytes("base16", "f43a105d"),                # arc200_transferFrom
-                        from_,                                      # FROM: approver/owner
-                        to_,                                        # TO
-                        Itob(amount_),                              # ARC200 Amount
-                    ],
-                }
-            ),
+            InnerTxnBuilder.SetFields({
+                TxnField.type_enum: TxnType.ApplicationCall,
+                TxnField.application_id: App.globalGet(arc200_app_id_key),
+                TxnField.applications: [App.globalGet(arc200_app_id_key)],
+                TxnField.accounts: [to_],
+                TxnField.application_args: [
+                    # Bytes("base16", "f43a105d"),                # arc200_transferFrom
+                    # from_,                                      # FROM: approver/owner
+                    Bytes("base16", "da7025b9"),  # arc200_transfer
+                    to_,  # TO
+                    full_32_byte_amount,  # ARC200 Amount in uint256
+                ],
+            }),
             InnerTxnBuilder.Submit(),
         )
 
