@@ -74,10 +74,10 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[1])),
-        App.globalPut(nft_id_key, Txn.application_args[2]),
-        App.globalPut(nft_price, Btoi(Txn.application_args[3])),
-        App.globalPut(fees_address, Txn.application_args[4]),
+        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[0])),
+        App.globalPut(nft_id_key, Txn.application_args[1]),
+        App.globalPut(nft_price, Btoi(Txn.application_args[2])),
+        App.globalPut(fees_address, Txn.application_args[3]),
         Approve(),
     )
 
