@@ -73,7 +73,7 @@ def approval_program():
                 TxnField.type_enum: TxnType.ApplicationCall,
                 TxnField.application_id: App.globalGet(arc200_app_id_key),
                 TxnField.applications: [App.globalGet(arc200_app_id_key)],
-                TxnField.accounts: [from_, to_],
+                TxnField.accounts: [to_],
                 TxnField.application_args: [
                     # Bytes("base16", "f43a105d"),                # arc200_transferFrom
                     # from_,                                      # FROM: approver/owner
