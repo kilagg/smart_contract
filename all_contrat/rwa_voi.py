@@ -1,11 +1,11 @@
 from pyteal import *
-from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE_FEES
+from all_contrat.constants import FEES_ADDRESS, PURCHASE_FEES
+from all_contrat.subroutine import fees_address, price
+from all_contrat.subroutine import function_send_note, function_close_app
+from all_contrat.subroutine import on_update, on_fund, on_delete
 
 
 def approval_program():
-    # PARAMETERS
-    price = Bytes("price")
-    fees_address = Bytes("fees_address")
     name = Bytes("name")
     description = Bytes("description")
 
@@ -22,37 +22,6 @@ def approval_program():
                 }
             ),
             InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def function_send_note(amount: Expr, note: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: amount,
-                    TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: App.globalGet(fees_address),
-                    TxnField.note: note,
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def function_close_app() -> Expr:
-        return If(Balance(Global.current_application_address()) != Int(0)).Then(
-            Seq(
-                InnerTxnBuilder.Begin(),
-                InnerTxnBuilder.SetFields(
-                    {
-                        TxnField.type_enum: TxnType.Payment,
-                        TxnField.close_remainder_to: Global.creator_address(),
-                    }
-                ),
-                InnerTxnBuilder.Submit(),
-            )
         )
 
     on_create = Seq(
@@ -81,32 +50,11 @@ def approval_program():
         Reject()
     )
 
-    on_update = Seq(
-        Assert(
-            And(
-                Txn.sender() == Global.creator_address(),
-                Btoi(Txn.application_args[1]) > Int(0)
-            )
-        ),
-        Seq(
-            App.globalPut(price, Btoi(Txn.application_args[1])),
-            function_send_note(Int(ZERO_FEES), Bytes("sale,update,1/rwa")),
-            Approve()
-        ),
-        Reject()
-    )
-
-    on_delete = Seq(
-        Assert(Txn.sender() == Global.creator_address()),
-        function_send_note(Int(ZERO_FEES), Bytes("sale,close,1/rwa")),
-        function_close_app(),
-        Approve()
-    )
-
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
-        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
-        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update],
+        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete("sale,close,1/rwa")],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("fund")), on_fund("sale,fund,1/rwa")],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update("sale,update,1/rwa")],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("buy")), on_buy],
         [
             Or(
