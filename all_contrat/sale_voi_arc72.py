@@ -116,9 +116,7 @@ def approval_program():
     )
 
     on_delete = Seq(
-        Assert(
-            Txn.sender() == Global.creator_address()
-        ),
+        Assert(Txn.sender() == Global.creator_address()),
         function_send_note(Int(ZERO_FEES), Bytes("sale,close,1/72")),
         function_close_app(),
         Approve(),
