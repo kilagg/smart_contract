@@ -104,7 +104,7 @@ def approval_program():
         App.globalPut(nft_max_price, Btoi(Txn.application_args[3])),
         App.globalPut(nft_min_price, Btoi(Txn.application_args[4])),
         App.globalPut(fees_address, Txn.application_args[5]),
-        App.globalPut(nft_app_address, Btoi(Txn.application_args[6])),
+        App.globalPut(nft_app_address, Txn.application_args[6]),
         App.globalPut(end_time_key, Btoi(Txn.application_args[7])),
         App.globalPut(start_time_key, Global.latest_timestamp()),
         Assert(App.globalGet(nft_max_price) >= App.globalGet(nft_min_price)),
@@ -158,9 +158,7 @@ def approval_program():
     )
 
     on_delete = Seq(
-        Assert(
-            Txn.sender() == Global.creator_address()
-        ),
+        Assert(Txn.sender() == Global.creator_address()),
         function_send_note(Int(FEES), Bytes("dutch,close,200/72")),
         function_close_app(),
         Approve(),
