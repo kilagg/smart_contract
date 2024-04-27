@@ -119,20 +119,20 @@ def approval_program():
                 # new formula : max - (current-start)((max-min)/(end-start))
                 Btoi(Txn.application_args[1]) >= Minus(
                     App.globalGet(nft_max_price),
-                    Mul(
-                        Minus(
-                            Global.latest_timestamp(),
-                            App.globalGet(start_time_key)
-                        ),
-                        Div(
+                    Div(
+                        Mul(
                             Minus(
                                 App.globalGet(nft_max_price),
                                 App.globalGet(nft_min_price)
                             ),
                             Minus(
-                                App.globalGet(end_time_key),
+                                Global.latest_timestamp(),
                                 App.globalGet(start_time_key)
                             )
+                        ),
+                        Minus(
+                            App.globalGet(end_time_key),
+                            App.globalGet(start_time_key)
                         )
                     )
                 ),
