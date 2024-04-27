@@ -96,20 +96,20 @@ def approval_program():
                 # new formula : max - (current-start)((max-min)/(end-start))
                 Gtxn[Txn.group_index() - Int(1)].amount() >= Minus(
                     App.globalGet(nft_max_price),
-                    Mul(
-                        Minus(
-                            Global.latest_timestamp(),
-                            App.globalGet(start_time_key)
+                    Div(
+                        Mul(
+                            Minus(
+                                App.globalGet(nft_max_price),
+                                App.globalGet(nft_min_price)
+                            ),
+                            Minus(
+                                Global.latest_timestamp(),
+                                App.globalGet(start_time_key)
+                            )
                         ),
-                        Div(
-                             Minus(
-                                 App.globalGet(nft_max_price),
-                                 App.globalGet(nft_min_price)
-                             ),
-                             Minus(
-                                 App.globalGet(end_time_key),
-                                 App.globalGet(start_time_key)
-                             )
+                        Minus(
+                            App.globalGet(end_time_key),
+                            App.globalGet(start_time_key)
                         )
                     )
                 ),
