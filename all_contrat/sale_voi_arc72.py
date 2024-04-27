@@ -3,7 +3,6 @@ from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE
 
 
 def approval_program():
-    # PARAMETERS
     nft_id = Bytes("nft_id")
     nft_app_id = Bytes("nft_app_id")
     price = Bytes("price")
