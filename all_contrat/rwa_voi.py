@@ -1,5 +1,5 @@
 from pyteal import *
-from all_contrat.constants import FEES_ADDRESS, FEES
+from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE_FEES
 
 
 def approval_program():
@@ -10,13 +10,13 @@ def approval_program():
     description = Bytes("description")
 
     @Subroutine(TealType.none)
-    def function_pay_seller() -> Expr:
+    def function_payment() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: App.globalGet(price)-Int(FEES),
+                    TxnField.amount: App.globalGet(price)-Int(PURCHASE_FEES),
                     TxnField.sender: Global.current_application_address(),
                     TxnField.receiver: Global.creator_address(),
                 }
@@ -57,9 +57,9 @@ def approval_program():
 
     on_create = Seq(
         App.globalPut(price, Btoi(Txn.application_args[0])),
-        App.globalPut(fees_address, Txn.application_args[1]),
-        App.globalPut(name, Txn.application_args[2]),
-        App.globalPut(description, Txn.application_args[3]),
+        App.globalPut(name, Txn.application_args[1]),
+        App.globalPut(description, Txn.application_args[2]),
+        App.globalPut(fees_address, Addr(FEES_ADDRESS)),
         Approve(),
     )
 
@@ -69,19 +69,19 @@ def approval_program():
                 Gtxn[Txn.group_index() - Int(1)].amount() == App.globalGet(price),
                 Gtxn[Txn.group_index() - Int(1)].receiver() == Global.current_application_address(),
                 Gtxn[Txn.group_index() - Int(1)].type_enum() == TxnType.Payment,
-                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender(),
+                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender()
             )
         ),
         Seq(
-            function_send_note(Int(0), Bytes("sale,buy,1/rwa")),
-            function_pay_seller(),
+            function_payment(),
+            function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,1/rwa")),
             function_close_app(),
             Approve()
         ),
-        Reject(),
+        Reject()
     )
 
-    on_update_price = Seq(
+    on_update = Seq(
         Assert(
             And(
                 Txn.sender() == Global.creator_address(),
@@ -89,36 +89,30 @@ def approval_program():
             )
         ),
         Seq(
-            function_send_note(Int(0), Bytes("sale,update,1/rwa")),
             App.globalPut(price, Btoi(Txn.application_args[1])),
+            function_send_note(Int(ZERO_FEES), Bytes("sale,update,1/rwa")),
             Approve()
         ),
         Reject()
     )
 
-    on_call = Cond(
-        [Txn.application_args[0] == Bytes("buy"), on_buy],
-        [Txn.application_args[0] == Bytes("update_price"), on_update_price]
-    )
-
     on_delete = Seq(
-        Assert(
-            Txn.sender() == Global.creator_address()
-        ),
-        function_send_note(Int(0), Bytes("sale,close,1/rwa")),
+        Assert(Txn.sender() == Global.creator_address()),
+        function_send_note(Int(ZERO_FEES), Bytes("sale,close,1/rwa")),
         function_close_app(),
-        Approve(),
+        Approve()
     )
 
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
-        [Txn.on_completion() == OnComplete.NoOp, on_call],
         [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("buy")), on_buy],
         [
             Or(
                 Txn.on_completion() == OnComplete.OptIn,
                 Txn.on_completion() == OnComplete.CloseOut,
-                Txn.on_completion() == OnComplete.UpdateApplication,
+                Txn.on_completion() == OnComplete.UpdateApplication
             ),
             Reject(),
         ],
@@ -139,4 +133,3 @@ if __name__ == "__main__":
         headers=headers_tx,
     )
     print(client.compile(compiled)['result'])
-    print("ended")
