@@ -21,7 +21,7 @@ def approval_program():
                     Global.creator_address(),
                     to,
                     App.globalGet(nft_id)
-                ],
+                ]
             }),
             InnerTxnBuilder.Submit(),
         )
@@ -35,10 +35,10 @@ def approval_program():
                     TxnField.type_enum: TxnType.Payment,
                     TxnField.amount: App.globalGet(price)-Int(PURCHASE_FEES),
                     TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: Global.creator_address(),
+                    TxnField.receiver: Global.creator_address()
                 }
             ),
-            InnerTxnBuilder.Submit(),
+            InnerTxnBuilder.Submit()
         )
 
     @Subroutine(TealType.none)
@@ -51,10 +51,10 @@ def approval_program():
                     TxnField.amount: amount,
                     TxnField.sender: Global.current_application_address(),
                     TxnField.receiver: App.globalGet(fees_address),
-                    TxnField.note: note,
+                    TxnField.note: note
                 }
             ),
-            InnerTxnBuilder.Submit(),
+            InnerTxnBuilder.Submit()
         )
 
     @Subroutine(TealType.none)
@@ -68,7 +68,7 @@ def approval_program():
                         TxnField.close_remainder_to: Global.creator_address(),
                     }
                 ),
-                InnerTxnBuilder.Submit(),
+                InnerTxnBuilder.Submit()
             )
         )
 
@@ -77,7 +77,7 @@ def approval_program():
         App.globalPut(nft_id, Txn.application_args[1]),
         App.globalPut(price, Btoi(Txn.application_args[2])),
         App.globalPut(fees_address, Addr(FEES_ADDRESS)),
-        Approve(),
+        Approve()
     )
 
     on_buy = Seq(
@@ -96,7 +96,7 @@ def approval_program():
             function_close_app(),
             Approve()
         ),
-        Reject(),
+        Reject()
     )
 
     on_update = Seq(
