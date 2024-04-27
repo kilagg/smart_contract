@@ -87,7 +87,7 @@ def approval_program():
                 Gtxn[Txn.group_index() - Int(1)].amount() == App.globalGet(price),
                 Gtxn[Txn.group_index() - Int(1)].receiver() == Global.current_application_address(),
                 Gtxn[Txn.group_index() - Int(1)].type_enum() == TxnType.Payment,
-                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender(),
+                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender()
             )
         ),
         Seq(
@@ -119,7 +119,7 @@ def approval_program():
         Assert(Txn.sender() == Global.creator_address()),
         function_send_note(Int(ZERO_FEES), Bytes("sale,close,1/72")),
         function_close_app(),
-        Approve(),
+        Approve()
     )
 
     program = Cond(
@@ -132,7 +132,7 @@ def approval_program():
             Or(
                 Txn.on_completion() == OnComplete.OptIn,
                 Txn.on_completion() == OnComplete.CloseOut,
-                Txn.on_completion() == OnComplete.UpdateApplication,
+                Txn.on_completion() == OnComplete.UpdateApplication
             ),
             Reject(),
         ],
