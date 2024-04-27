@@ -66,7 +66,7 @@ def approval_program():
     def ARC200transferFrom(from_: Expr, to_: Expr, amount_: Expr) -> Expr:
         zero_padding = BytesZero(Int(24))
         byte_slice_amount = Itob(amount_)
-        full_32_byte_amount = Concat(byte_slice_amount, zero_padding)
+        full_32_byte_amount = Concat(zero_padding, byte_slice_amount)
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields({
