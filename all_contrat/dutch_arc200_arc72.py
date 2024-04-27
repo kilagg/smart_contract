@@ -59,7 +59,7 @@ def approval_program():
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),
                         Global.creator_address(),
-                        App.globalGet(amount)
+                        amount
                     ]
                 }
             ),
@@ -136,17 +136,14 @@ def approval_program():
                         )
                     )
                 ),
-                Global.latest_timestamp() <= App.globalGet(end_time_key),
-                Gtxn[Txn.group_index() - Int(1)].receiver() == Global.current_application_address(),
-                Gtxn[Txn.group_index() - Int(1)].type_enum() == TxnType.Payment,
-                Gtxn[Txn.group_index() - Int(1)].sender() == Txn.sender()
+                Global.latest_timestamp() <= App.globalGet(end_time_key)
             )
         ),
         Seq(
             function_send_note(Int(FEES), Bytes("dutch,buy,200/72")),
             function_arc200_fund(),
-            function_arc200_transfer(Btoi(Txn.application_args[1])),
-            function_transfert_nft(Txn.sender()),
+            function_arc200_transfer(Gtxn[Txn.group_index() - Int(2)].application_args[2]),
+            function_transfert_nft(Gtxn[Txn.group_index() - Int(2)].sender()),
             Approve()
         ),
         Reject()
