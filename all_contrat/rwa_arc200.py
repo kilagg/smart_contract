@@ -1,18 +1,18 @@
 from pyteal import *
-from all_contrat.constants import FEES_ADDRESS, FEES
+from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE_FEES
 
 
 def approval_program():
     # PARAMETERS
-    arc200_app_id_key = Bytes("arc200_app_id")
-    arc200_app_address = Bytes("arc200_app_address")
     price = Bytes("price")
     fees_address = Bytes("fees_address")
     name = Bytes("name")
     description = Bytes("description")
+    arc200_app_id = Bytes("arc200_app_id")
+    arc200_app_address = Bytes("arc200_app_address")
 
     @Subroutine(TealType.none)
-    def function_arc200_fund() -> Expr:
+    def function_fund_arc200() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -27,18 +27,18 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def function_arc200_transfer() -> Expr:
+    def function_transfer_arc200() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id_key),
+                    TxnField.application_id: App.globalGet(arc200_app_id),
                     TxnField.on_completion: OnComplete.NoOp,
                     TxnField.application_args: [
                         Bytes("base16", "da7025b9"),
                         Global.creator_address(),
-                        App.globalGet(price)
+                        Concat(BytesZero(Int(24)), Itob(App.globalGet(price)-Int(PURCHASE_FEES)))
                     ]
                 }
             ),
@@ -77,57 +77,52 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(price, Txn.application_args[0]),
-        App.globalPut(fees_address, Txn.application_args[1]),
-        App.globalPut(name, Txn.application_args[2]),
-        App.globalPut(description, Txn.application_args[3]),
-        App.globalPut(arc200_app_id_key, Btoi(Txn.application_args[4])),
-        App.globalPut(arc200_app_address, Txn.application_args[5]),
+        App.globalPut(price, Btoi(Txn.application_args[0])),
+        App.globalPut(name, Txn.application_args[1]),
+        App.globalPut(description, Txn.application_args[2]),
+        App.globalPut(arc200_app_id, Btoi(Txn.application_args[3])),
+        App.globalPut(arc200_app_address, Txn.application_args[4]),
+        App.globalPut(fees_address, Addr(FEES_ADDRESS)),
         Approve(),
     )
 
     on_buy = Seq(
         Seq(
-            function_arc200_fund(),
-            function_arc200_transfer(),
-            function_send_note(Int(0), Bytes("sale,buy,200/rwa")),
-            Approve()
+            function_fund_arc200(),
+            function_transfer_arc200(),
+            function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,200/rwa")),
         ),
-        Reject(),
+        Approve()
     )
 
-    on_update_price = Seq(
+    on_update = Seq(
         Assert(
             And(
                 Txn.sender() == Global.creator_address(),
-                # Btoi(Txn.application_args[1]) > Int(0)
+                Btoi(Txn.application_args[1]) > Int(0)
             )
         ),
         Seq(
-            function_send_note(Int(0), Bytes("sale,update,200/rwa")),
-            App.globalPut(price, Txn.application_args[1]),
+            App.globalPut(price, Btoi(Txn.application_args[1])),
+            function_send_note(Int(ZERO_FEES), Bytes("sale,update,200/rwa")),
             Approve()
         ),
         Reject()
     )
 
-    on_call = Cond(
-        [Txn.application_args[0] == Bytes("pre_validate"), Approve()],
-        [Txn.application_args[0] == Bytes("buy"), on_buy],
-        [Txn.application_args[0] == Bytes("update_price"), on_update_price]
-    )
-
     on_delete = Seq(
         Assert(Txn.sender() == Global.creator_address()),
-        function_send_note(Int(0), Bytes("sale,close,200/rwa")),
+        function_send_note(Int(ZERO_FEES), Bytes("sale,close,200/rwa")),
         function_close_app(),
         Approve(),
     )
 
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
-        [Txn.on_completion() == OnComplete.NoOp, on_call],
         [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("pre_validate")), Approve()],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("buy")), on_buy],
         [
             Or(
                 Txn.on_completion() == OnComplete.OptIn,
@@ -153,4 +148,3 @@ if __name__ == "__main__":
         headers=headers_tx,
     )
     print(client.compile(compiled)['result'])
-    print("ended")
