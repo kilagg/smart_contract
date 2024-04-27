@@ -1,99 +1,11 @@
 from pyteal import *
-from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE_FEES
+from all_contrat.constants import FEES_ADDRESS, PURCHASE_FEES
+from all_contrat.subroutine import function_send_note, function_transfer_arc72, function_fund_arc200, function_transfer_arc200, function_close_app
+from all_contrat.subroutine import fees_address, nft_app_id, nft_id, arc200_app_address, arc200_app_id, price
+from all_contrat.subroutine import on_fund, on_delete, on_update
 
 
 def approval_program():
-    # PARAMETERS
-    nft_id = Bytes("nft_id")
-    nft_app_id = Bytes("nft_app_id")
-    price = Bytes("price")
-    fees_address = Bytes("fees_address")
-    arc200_app_id = Bytes("arc200_app_id")
-    arc200_app_address = Bytes("arc200_app_address")
-
-    @Subroutine(TealType.none)
-    def function_transfer_arc72(to: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields({
-                TxnField.type_enum: TxnType.ApplicationCall,
-                TxnField.application_id: App.globalGet(nft_app_id),
-                TxnField.on_completion: OnComplete.NoOp,
-                TxnField.application_args: [
-                    Bytes("base16", "f2f194a0"),
-                    Global.creator_address(),
-                    to,
-                    App.globalGet(nft_id)
-                ],
-            }),
-            InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def function_fund_arc200() -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: Int(28500),
-                    TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: App.globalGet(arc200_app_address)
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def function_transfer_arc200() -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(arc200_app_id),
-                    TxnField.on_completion: OnComplete.NoOp,
-                    TxnField.application_args: [
-                        Bytes("base16", "da7025b9"),
-                        Global.creator_address(),
-                        Concat(BytesZero(Int(24)), Itob(App.globalGet(price)-Int(PURCHASE_FEES)))
-                    ]
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
-
-    @Subroutine(TealType.none)
-    def function_send_note(amount: Expr, note: Expr) -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: amount,
-                    TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: App.globalGet(fees_address),
-                    TxnField.note: note,
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
-
-
-    @Subroutine(TealType.none)
-    def function_close_app() -> Expr:
-        return If(Balance(Global.current_application_address()) != Int(0)).Then(
-            Seq(
-                InnerTxnBuilder.Begin(),
-                InnerTxnBuilder.SetFields(
-                    {
-                        TxnField.type_enum: TxnType.Payment,
-                        TxnField.close_remainder_to: Global.creator_address(),
-                    }
-                ),
-                InnerTxnBuilder.Submit(),
-            )
-        )
 
     on_create = Seq(
         App.globalPut(nft_app_id, Btoi(Txn.application_args[0])),
@@ -107,40 +19,19 @@ def approval_program():
 
     on_buy = Seq(
         Seq(
-            function_fund_arc200(),
-            function_transfer_arc200(),
-            function_transfer_arc72(Txn.sender()),
             function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,200/72")),
+            function_fund_arc200(),
+            function_transfer_arc200(App.globalGet(price)-Int(PURCHASE_FEES), Global.creator_address()),
+            function_transfer_arc72(Txn.sender())
         ),
         Approve()
     )
 
-    on_update = Seq(
-        Assert(
-            And(
-                Txn.sender() == Global.creator_address(),
-                Btoi(Txn.application_args[1]) > Int(0)
-            )
-        ),
-        Seq(
-            App.globalPut(price, Btoi(Txn.application_args[1])),
-            function_send_note(Int(ZERO_FEES), Bytes("sale,update,200/72")),
-            Approve()
-        ),
-        Reject()
-    )
-
-    on_delete = Seq(
-        Assert(Txn.sender() == Global.creator_address()),
-        function_send_note(Int(ZERO_FEES), Bytes("sale,close,200/72")),
-        function_close_app(),
-        Approve(),
-    )
-
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
-        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
-        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update],
+        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete("sale,close,200/72")],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("fund")), on_fund("sale,fund,200/72")],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update("sale,update,200/72")],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("pre_validate")), Approve()],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("buy")), on_buy],
         [
