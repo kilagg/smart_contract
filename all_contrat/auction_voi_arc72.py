@@ -1,11 +1,11 @@
 from pyteal import *
-from all_contrat.constants import FEES_ADDRESS, FEES
+from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES, CREATE_FEES
 
 
 def approval_program():
     # PARAMETERS
-    nft_id_key = Bytes("nft_id")
-    nft_app_id_key = Bytes("nft_app_id")
+    nft_id = Bytes("nft_id")
+    nft_app_id = Bytes("nft_app_id")
     fees_address = Bytes("fees_address")
     end_time_key = Bytes("end")
     late_bid_delay_key = Bytes("late_bid_delay")
@@ -14,18 +14,18 @@ def approval_program():
     lead_bid_amount_key = Bytes("bid_amount")
 
     @Subroutine(TealType.none)
-    def function_transfert_nft(to_account: Expr) -> Expr:
+    def function_transfer_arc72(to: Expr) -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields({
                 TxnField.type_enum: TxnType.ApplicationCall,
-                TxnField.application_id: App.globalGet(nft_app_id_key),
+                TxnField.application_id: App.globalGet(nft_app_id),
                 TxnField.on_completion: OnComplete.NoOp,
                 TxnField.application_args: [
                     Bytes("base16", "f2f194a0"),
                     Global.creator_address(),
-                    to_account,
-                    App.globalGet(nft_id_key)
+                    to,
+                    App.globalGet(nft_id)
                 ],
             }),
             InnerTxnBuilder.Submit(),
@@ -63,7 +63,7 @@ def approval_program():
         )
 
     @Subroutine(TealType.none)
-    def repayPreviousLeadBidder() -> Expr:
+    def function_repay_bidder() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
@@ -77,20 +77,20 @@ def approval_program():
         )
 
     @Subroutine(TealType.bytes)
-    def arc72_owner() -> Expr:
+    def function_arc72_owner() -> Expr:
         return Seq(
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields(
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
-                    TxnField.application_id: App.globalGet(nft_app_id_key),
+                    TxnField.application_id: App.globalGet(nft_app_id),
                     TxnField.applications: [
-                        App.globalGet(nft_app_id_key),
+                        App.globalGet(nft_app_id)
                     ],
                     TxnField.accounts: [Global.current_application_address()],
                     TxnField.application_args: [
                         Bytes("base16", "79096a14"),  # arc72_OwnerOf
-                        App.globalGet(nft_id_key),  # arg: tokenId
+                        App.globalGet(nft_id),  # arg: tokenId
                     ],
                 }
             ),
@@ -99,11 +99,11 @@ def approval_program():
         )
 
     on_create = Seq(
-        App.globalPut(nft_app_id_key, Btoi(Txn.application_args[0])),
-        App.globalPut(nft_id_key, Txn.application_args[1]),
+        App.globalPut(nft_app_id, Btoi(Txn.application_args[0])),
+        App.globalPut(nft_id, Txn.application_args[1]),
         App.globalPut(reserve_amount_key, Btoi(Txn.application_args[2])),
-        App.globalPut(fees_address, Txn.application_args[3]),
-        App.globalPut(end_time_key, Btoi(Txn.application_args[4])),
+        App.globalPut(end_time_key, Btoi(Txn.application_args[3])),
+        App.globalPut(fees_address, Addr(FEES_ADDRESS)),
         App.globalPut(lead_bid_account_key, Global.zero_address()),
         App.globalPut(late_bid_delay_key, Int(600)),
         App.globalPut(lead_bid_amount_key, Int(0)),
@@ -124,9 +124,9 @@ def approval_program():
             If(
                 App.globalGet(lead_bid_account_key) != Global.zero_address()
             ).Then(
-                repayPreviousLeadBidder()
+                function_repay_bidder()
             ),
-            function_send_note(Int(0), Bytes("auction,bid,1/72")),
+            function_send_note(Int(ZERO_FEES), Bytes("auction,bid,1/72")),
             App.globalPut(lead_bid_amount_key, Gtxn[Txn.group_index() - Int(1)].amount()),
             App.globalPut(lead_bid_account_key, Gtxn[Txn.group_index() - Int(1)].sender()),
             If(
@@ -149,7 +149,7 @@ def approval_program():
                         App.globalGet(end_time_key) <= Global.latest_timestamp()
                     )
                 ),
-                function_send_note(Int(0), Bytes("auction,close_none,1/72")),
+                function_send_note(Int(ZERO_FEES), Bytes("auction,close_none,1/72")),
                 function_close_app(),
                 Approve(),
             )
@@ -159,22 +159,22 @@ def approval_program():
             ).Then(
                 Seq(
                     If(
-                        arc72_owner() == Global.creator_address()
+                        function_arc72_owner() == Global.creator_address()
                     ).Then(
                         Seq(
-                            function_send_note(Int(0), Bytes("auction,close_buy,1/72")),
-                            function_transfert_nft(App.globalGet(lead_bid_account_key))
+                            function_send_note(Int(PURCHASE_FEES), Bytes("auction,close_buy,1/72")),
+                            function_transfer_arc72(App.globalGet(lead_bid_account_key))
                         )
                     ).Else(
-                        function_send_note(Int(0), Bytes("auction,close_none,1/72")),
-                        repayPreviousLeadBidder()
+                        function_send_note(Int(ZERO_FEES), Bytes("auction,close_none,1/72")),
+                        function_repay_bidder()
                     ),
                     function_close_app(),
-                    Approve(),
+                    Approve()
                 )
-            ),
+            )
         ),
-        Reject(),
+        Reject()
     )
 
     program = Cond(
@@ -185,7 +185,7 @@ def approval_program():
             Or(
                 Txn.on_completion() == OnComplete.OptIn,
                 Txn.on_completion() == OnComplete.CloseOut,
-                Txn.on_completion() == OnComplete.UpdateApplication,
+                Txn.on_completion() == OnComplete.UpdateApplication
             ),
             Reject(),
         ],
@@ -206,4 +206,3 @@ if __name__ == "__main__":
         headers=headers_tx,
     )
     print(client.compile(compiled)['result'])
-    print("ended")
