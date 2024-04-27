@@ -155,4 +155,3 @@ if __name__ == "__main__":
         headers=headers_tx,
     )
     print(client.compile(compiled)['result'])
-    print("ended")
