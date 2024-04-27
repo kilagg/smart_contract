@@ -92,7 +92,7 @@ def approval_program():
         ),
         Seq(
             function_payment(),
-            function_transfer_arc72(Gtxn[Txn.group_index() - Int(1)].sender()),
+            function_transfer_arc72(Txn.sender()),
             function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,1/72")),
             function_close_app(),
             Approve()
