@@ -100,12 +100,12 @@ def approval_program():
         Assert(
             And(
                 Txn.sender() == Global.creator_address(),
-                Btoi(Txn.application_args[1]) > Int(0)
+                # Btoi(Txn.application_args[1]) > Int(0)
             )
         ),
         Seq(
             function_send_note(Int(0), Bytes("sale,update,200/rwa")),
-            App.globalPut(price, Btoi(Txn.application_args[1])),
+            App.globalPut(price, Txn.application_args[1]),
             Approve()
         ),
         Reject()
