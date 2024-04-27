@@ -76,6 +76,9 @@ def approval_program():
             InnerTxnBuilder.Submit(),
         )
 
+    def Btou256(bytes):
+        return Concat(BytesZero(Int(32) - Len(bytes)), bytes)
+        
     @Subroutine(TealType.bytes)
     def function_arc72_owner() -> Expr:
         return Seq(
@@ -84,18 +87,14 @@ def approval_program():
                 {
                     TxnField.type_enum: TxnType.ApplicationCall,
                     TxnField.application_id: App.globalGet(nft_app_id),
-                    TxnField.applications: [
-                        App.globalGet(nft_app_id)
-                    ],
-                    TxnField.accounts: [Global.current_application_address()],
                     TxnField.application_args: [
-                        Bytes("base16", "79096a14"),  # arc72_OwnerOf
-                        App.globalGet(nft_id),  # arg: tokenId
+                        Bytes("base16", "79096a14"),  # Method selector for "ownerOf"
+                        Btou256(App.globalGet(nft_id)),
                     ],
                 }
             ),
             InnerTxnBuilder.Submit(),
-            Return(InnerTxn.last_log()),
+            Return(Extract(Suffix(InnerTxn.last_log(), Int(8)), Int(0), Int(32))),
         )
 
     on_create = Seq(
