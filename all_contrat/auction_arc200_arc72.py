@@ -9,7 +9,7 @@ def approval_program():
     @Subroutine(TealType.none)
     def function_repay_bidder() -> Expr:
         return Seq(
-            function_transfer_arc200(bid_amount, bid_account)
+            function_transfer_arc200(App.globalGet(bid_amount), App.globalGet(bid_account))
         )
 
     on_create = Seq(
@@ -31,7 +31,7 @@ def approval_program():
             And(
                 Global.latest_timestamp() < App.globalGet(end_time_key),
                 Btoi(Txn.application_args[1]) >= App.globalGet(nft_min_price),
-                # Btoi(Txn.application_args[1]) >= Div(Mul(App.globalGet(bid_amount), Int(110)), Int(100))
+                Btoi(Txn.application_args[1]) >= Div(Mul(App.globalGet(bid_amount), Int(110)), Int(100))
             )
         ),
         Seq(
@@ -61,7 +61,7 @@ def approval_program():
         ),
         function_send_note(Int(PURCHASE_FEES), Bytes("auction,close,200/72")),
         function_transfer_arc72(App.globalGet(bid_account)),
-        function_transfer_arc200(bid_amount, Global.creator_address()),
+        function_transfer_arc200(App.globalGet(bid_amount), Global.creator_address()),
         function_close_app(),
         Approve()
     )
