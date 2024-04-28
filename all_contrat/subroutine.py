@@ -8,6 +8,12 @@ arc200_app_address = Bytes("arc200_app_address")
 arc200_app_id = Bytes("arc200_app_id")
 price = Bytes("price")
 CREATE_FEES = 0
+name = Bytes("name")
+description = Bytes("description")
+nft_max_price = Bytes("max_price")
+nft_min_price = Bytes("min_price")
+start_time_key = Bytes("start")
+end_time_key = Bytes("end")
 
 
 @Subroutine(TealType.none)
