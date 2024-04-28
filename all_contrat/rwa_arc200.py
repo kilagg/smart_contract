@@ -28,7 +28,7 @@ def approval_program():
 
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
-        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete("sale,close,200/rwa")],
+        [Txn.on_completion() == OnComplete.DeleteApplication, on_delete("sale,cancel,200/rwa")],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("fund")), on_fund("sale,fund,1/rwa")],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("update_price")), on_update("sale,update,200/rwa")],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("pre_validate")), Approve()],
