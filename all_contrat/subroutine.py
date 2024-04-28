@@ -14,6 +14,9 @@ nft_max_price = Bytes("max_price")
 nft_min_price = Bytes("min_price")
 start_time_key = Bytes("start")
 end_time_key = Bytes("end")
+late_bid_delay = Bytes("late_bid_delay")
+bid_account = Bytes("bid_account")
+bid_amount = Bytes("bid_amount")
 
 
 @Subroutine(TealType.none)
