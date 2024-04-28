@@ -94,7 +94,7 @@ def approval_program():
                 }
             ),
             InnerTxnBuilder.Submit(),
-            Return(Extract(Suffix(InnerTxn.last_log(), Int(8)), Int(0), Int(32))),
+            Return(Extract(Suffix(InnerTxn.last_log(), Int(4)), Int(0), Int(32))),
         )
 
     on_create = Seq(
