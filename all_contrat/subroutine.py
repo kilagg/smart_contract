@@ -82,6 +82,22 @@ def function_transfer_arc200(amount: Expr, to: Expr) -> Expr:
 
 
 @Subroutine(TealType.none)
+def function_payment(amount: Expr) -> Expr:
+    return Seq(
+        InnerTxnBuilder.Begin(),
+        InnerTxnBuilder.SetFields(
+            {
+                TxnField.type_enum: TxnType.Payment,
+                TxnField.amount: amount,
+                TxnField.sender: Global.current_application_address(),
+                TxnField.receiver: Global.creator_address()
+            }
+        ),
+        InnerTxnBuilder.Submit()
+    )
+
+
+@Subroutine(TealType.none)
 def function_transfer_arc72(to: Expr) -> Expr:
     return Seq(
         InnerTxnBuilder.Begin(),

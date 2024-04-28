@@ -1,26 +1,11 @@
 from pyteal import *
 from all_contrat.constants import FEES_ADDRESS, PURCHASE_FEES
-from all_contrat.subroutine import function_send_note, function_close_app, function_transfer_arc72
+from all_contrat.subroutine import function_send_note, function_close_app, function_transfer_arc72, function_payment
 from all_contrat.subroutine import fees_address, nft_id, nft_app_id, price
 from all_contrat.subroutine import on_delete, on_fund, on_update
 
 
 def approval_program():
-
-    @Subroutine(TealType.none)
-    def function_payment() -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: App.globalGet(price)-Int(PURCHASE_FEES),
-                    TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: Global.creator_address()
-                }
-            ),
-            InnerTxnBuilder.Submit()
-        )
 
     on_create = Seq(
         App.globalPut(nft_app_id, Btoi(Txn.application_args[0])),
@@ -41,7 +26,7 @@ def approval_program():
         ),
         Seq(
             function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,1/72")),
-            function_payment(),
+            function_payment(App.globalGet(price)-Int(PURCHASE_FEES)),
             function_transfer_arc72(Txn.sender()),
             function_close_app(),
             Approve()

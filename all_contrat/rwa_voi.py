@@ -1,28 +1,13 @@
 from pyteal import *
 from all_contrat.constants import FEES_ADDRESS, PURCHASE_FEES
 from all_contrat.subroutine import fees_address, price
-from all_contrat.subroutine import function_send_note, function_close_app
+from all_contrat.subroutine import function_send_note, function_close_app, function_payment
 from all_contrat.subroutine import on_update, on_fund, on_delete
 
 
 def approval_program():
     name = Bytes("name")
     description = Bytes("description")
-
-    @Subroutine(TealType.none)
-    def function_payment() -> Expr:
-        return Seq(
-            InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields(
-                {
-                    TxnField.type_enum: TxnType.Payment,
-                    TxnField.amount: App.globalGet(price)-Int(PURCHASE_FEES),
-                    TxnField.sender: Global.current_application_address(),
-                    TxnField.receiver: Global.creator_address(),
-                }
-            ),
-            InnerTxnBuilder.Submit(),
-        )
 
     on_create = Seq(
         App.globalPut(price, Btoi(Txn.application_args[0])),
@@ -42,7 +27,7 @@ def approval_program():
             )
         ),
         Seq(
-            function_payment(),
+            function_payment(App.globalGet(price)-Int(PURCHASE_FEES)),
             function_send_note(Int(PURCHASE_FEES), Bytes("sale,buy,1/rwa")),
             function_close_app(),
             Approve()
@@ -67,17 +52,3 @@ def approval_program():
     )
 
     return program
-
-
-if __name__ == "__main__":
-    compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
-    from algosdk.v2client.algod import AlgodClient
-
-    algod_token_tx = ""
-    headers_tx = {"X-Algo-API-Token": algod_token_tx}
-    client = AlgodClient(
-        algod_token=algod_token_tx,
-        algod_address="https://testnet-api.voi.nodly.io:443",
-        headers=headers_tx,
-    )
-    print(client.compile(compiled)['result'])
