@@ -1,6 +1,6 @@
 from pyteal import *
 from all_contrat.constants import FEES_ADDRESS, ZERO_FEES, PURCHASE_FEES
-from all_contrat.subroutine import function_send_note, function_close_app, function_transfer_arc72, function_transfer_arc200
+from all_contrat.subroutine import function_fund_arc200, function_send_note, function_close_app, function_transfer_arc72, function_transfer_arc200
 from all_contrat.subroutine import nft_id, nft_app_id, late_bid_delay, bid_amount, bid_account, fees_address, end_time_key, nft_min_price, on_fund, arc200_app_id, arc200_app_address
 
 
@@ -61,6 +61,7 @@ def approval_program():
         ),
         function_send_note(Int(PURCHASE_FEES), Bytes("auction,close,200/72")),
         function_transfer_arc72(App.globalGet(bid_account)),
+        function_fund_arc200(),
         function_transfer_arc200(App.globalGet(bid_amount), Global.creator_address()),
         function_close_app(),
         Approve()
@@ -101,16 +102,3 @@ def approval_program():
 
     return program
 
-
-if __name__ == "__main__":
-    compiled = compileTeal(approval_program(), mode=Mode.Application, version=10)
-    from algosdk.v2client.algod import AlgodClient
-
-    algod_token_tx = ""
-    headers_tx = {"X-Algo-API-Token": algod_token_tx}
-    client = AlgodClient(
-        algod_token=algod_token_tx,
-        algod_address="https://testnet-api.voi.nodly.io:443",
-        headers=headers_tx,
-    )
-    print(client.compile(compiled)['result'])
