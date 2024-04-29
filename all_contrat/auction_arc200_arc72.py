@@ -88,6 +88,7 @@ def approval_program():
     program = Cond(
         [Txn.application_id() == Int(0), on_create],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("fund")), on_fund("auction,create,200/72")],
+        [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("pre_validate")), Approve()],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("bid")), on_bid],
         [And(Txn.on_completion() == OnComplete.NoOp, Txn.application_args[0] == Bytes("close")), on_close],
         [Txn.on_completion() == OnComplete.DeleteApplication, on_delete],
