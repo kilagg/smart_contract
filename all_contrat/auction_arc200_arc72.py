@@ -31,6 +31,7 @@ def approval_program():
             And(
                 Global.latest_timestamp() < App.globalGet(end_time_key),
                 Btoi(Txn.application_args[1]) >= App.globalGet(nft_min_price),
+                Btoi(Txn.application_args[1]) >= Add(App.globalGet(bid_amount), Int(1)),
                 Btoi(Txn.application_args[1]) >= Div(Mul(App.globalGet(bid_amount), Int(110)), Int(100))
             )
         ),
