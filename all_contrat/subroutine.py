@@ -18,6 +18,24 @@ late_bid_delay = Bytes("late_bid_delay")
 bid_account = Bytes("bid_account")
 bid_amount = Bytes("bid_amount")
 
+## Helper functions
+LENGTH_UINT256 = Int(32)
+LENGTH_UINT64 = Int(8)
+LENGTH_UINT8 = Int(1)
+
+# bytes array (32) -> uint256 (32 bytes)
+def Btou256(bytes):
+    return Concat(BytesZero(LENGTH_UINT256 - Len(bytes)), bytes)
+
+# uint64 (Teal Int on 8 bytes) -> uint256 (32 bytes)
+def Itou256(int):
+    return Concat(BytesZero(LENGTH_UINT256 - LENGTH_UINT64), Itob(int))
+
+# uint256 to uint64 Teal Int (8 bytes)
+def U256toi(bytes):
+    return Btoi(Extract(bytes, LENGTH_UINT256 - LENGTH_UINT64, LENGTH_UINT64))
+
+## Routines
 
 @Subroutine(TealType.none)
 def function_close_app() -> Expr:
@@ -82,7 +100,7 @@ def function_transfer_arc200(amount: Expr, to: Expr) -> Expr:
                 TxnField.application_args: [
                     Bytes("base16", "da7025b9"),
                     to,
-                    Concat(BytesZero(Int(24)), Itob(amount))
+                    Itou256(amount)
                 ]
             }
         ),
